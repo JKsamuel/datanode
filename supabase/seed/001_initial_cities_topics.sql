@@ -2,6 +2,7 @@ begin;
 
 insert into public.cities (slug, name_ko, name_en, province_code, aliases)
 values
+  ('canada', '캐나다', 'Canada', null, array['canada', '캐나다']),
   ('toronto', '토론토', 'Toronto', 'ON', array['GTA', 'toronto', '토론토']),
   ('vancouver', '밴쿠버', 'Vancouver', 'BC', array['metro vancouver', 'vancouver', '밴쿠버']),
   ('montreal', '몬트리올', 'Montreal', 'QC', array['montréal', 'mtl', '몽트리올']),
@@ -11,7 +12,12 @@ values
   ('winnipeg', '위니펙', 'Winnipeg', 'MB', array['wpg', 'winnipeg']),
   ('halifax', '핼리팩스', 'Halifax', 'NS', array['yhz', 'halifax']),
   ('victoria', '빅토리아', 'Victoria', 'BC', array['yyj', 'victoria bc']),
-  ('waterloo-kitchener', '워털루/키치너', 'Waterloo/Kitchener', 'ON', array['waterloo', 'kitchener', 'kw', 'kwc'])
+  ('waterloo-kitchener', '워털루/키치너', 'Waterloo/Kitchener', 'ON', array['waterloo', 'kitchener', 'kw', 'kwc']),
+  ('mississauga', '미시사가', 'Mississauga', 'ON', array['mississauga', '미시사가', 'GTA']),
+  ('saskatoon', '사스카툰', 'Saskatoon', 'SK', array['saskatoon', '사스카툰']),
+  ('hamilton', '해밀턴', 'Hamilton', 'ON', array['hamilton', '해밀턴', 'hamilton ontario', '해밀턴 온타리오']),
+  ('burlington', '벌링턴', 'Burlington', 'ON', array['burlington', '벌링턴', 'burlington ontario', '벌링턴 온타리오']),
+  ('oakville', '오크빌', 'Oakville', 'ON', array['oakville', '오크빌', 'oakville ontario', '오크빌 온타리오'])
 on conflict (slug) do update set
   name_ko = excluded.name_ko,
   name_en = excluded.name_en,

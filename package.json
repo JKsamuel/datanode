@@ -7,10 +7,13 @@
     "dev": "python3 -m http.server 4173",
     "start": "python3 -m http.server 4173",
     "agent:collector": "node agents/instagram-city-agent.js",
+    "agent:threads": "node agents/threads-city-agent.js",
     "agent:enrich": "node agents/enrichment-agent.js",
     "agent:graph": "node agents/graph-builder-agent.js",
     "agent:run": "node agents/run-city-agents.js",
-    "agent:smoke": "node agents/run-city-agents.js --dry-run --cities=toronto,vancouver --topics=food,rent-real-estate --concurrency=2"
+    "agent:smoke": "node agents/run-city-agents.js --dry-run --cities=toronto,vancouver --topics=food,rent-real-estate --concurrency=2",
+    "agent:all:smoke": "node agents/run-city-agents.js --dry-run --platforms=instagram,threads --cities=toronto,vancouver --topics=food,rent-real-estate --queries=3 --per-query=3 --concurrency=2",
+    "agent:threads:smoke": "node agents/threads-city-agent.js --dry-run --cities=toronto,vancouver --topics=food,rent-real-estate --queries=3 --per-query=3 --concurrency=2"
   },
   "devDependencies": {
     "playwright": "1.54.0"

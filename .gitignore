@@ -3,3 +3,4 @@
 !.env.example
 node_modules/
 agents/.instagram-storage-state.json
+agents/.threads-storage-state.json

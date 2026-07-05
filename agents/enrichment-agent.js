@@ -1,4 +1,5 @@
 import { parseArgs } from './lib/args.js';
+import { assessPostRelevance } from './lib/content-filter.js';
 import { upsertHashtagsForPost } from './lib/db.js';
 import { loadEnv } from './lib/env.js';
 import { extractHashtags } from './lib/instagram.js';
@@ -8,7 +9,10 @@ loadEnv();
 
 async function fetchPendingPosts(client, limit) {
   const params = new URLSearchParams();
-  params.set('select', 'id,source_url,caption,author_handle,status');
+  params.set(
+    'select',
+    'id,source_url,caption,author_handle,status,metadata,cities(slug,name_ko,name_en,province_code,aliases),topics(slug,label_ko,label_en,keywords,seed_hashtags)',
+  );
   params.set('status', 'in.(candidate,approved)');
   params.set('order', 'discovered_at.desc');
   params.set('limit', String(limit));
@@ -69,18 +73,31 @@ export async function runEnrichment(options = {}) {
           : await inspectPost(page, post.source_url, timeoutMs);
         const hashtags = extractHashtags(signals.bodyText);
         const caption = post.caption || signals.title || signals.bodyText.replace(/\s+/g, ' ').slice(0, 500);
+        const relevance = assessPostRelevance({
+          text: [caption, signals.bodyText, ...hashtags.map((tag) => `#${tag}`)].join(' '),
+          city: post.cities,
+          topic: post.topics,
+          sourceProfileHandle: post.metadata?.source_profile_handle,
+          sourceQuery: post.metadata?.source_query,
+        });
         if (!dryRun) {
           const params = new URLSearchParams({ id: `eq.${post.id}` });
           await client.patch('social_posts', params, {
             caption,
             source_published_at: signals.publishedAt,
-            status: post.status === 'candidate' ? 'approved' : post.status,
+            language: relevance.language,
+            status: relevance.accepted ? 'approved' : 'rejected',
+            score: relevance.score,
             reviewed_at: new Date().toISOString(),
-            metadata: { enricher: 'enrichment-agent' },
+            metadata: {
+              ...(post.metadata ?? {}),
+              enricher: 'enrichment-agent',
+              relevance_filter: relevance,
+            },
           });
-          await upsertHashtagsForPost(client, post.id, hashtags);
+          if (relevance.accepted) await upsertHashtagsForPost(client, post.id, hashtags);
         }
-        summary.push({ postId: post.id, hashtags: hashtags.length, dryRun });
+        summary.push({ postId: post.id, accepted: relevance.accepted, status: relevance.status, hashtags: hashtags.length, dryRun });
       } finally {
         await page?.close();
       }

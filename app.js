@@ -9,6 +9,9 @@ const cities = [
   { slug: "halifax", ko: "핼리팩스", en: "Halifax" },
   { slug: "victoria", ko: "빅토리아", en: "Victoria" },
   { slug: "waterloo-kitchener", ko: "워털루/키치너", en: "Waterloo/Kitchener" },
+  { slug: "hamilton", ko: "해밀턴", en: "Hamilton" },
+  { slug: "burlington", ko: "벌링턴", en: "Burlington" },
+  { slug: "oakville", ko: "오크빌", en: "Oakville" },
 ];
 
 const topics = [
@@ -81,32 +84,25 @@ const state = {
 };
 
 let basePosts = fallbackPosts;
+let currentGraph = null;
+let animationStarted = false;
+const sphereLatitudes = [-60, -40, -20, 0, 20, 40, 60];
+const sphereLongitudes = Array.from({ length: 12 }, (_, index) => index * 30);
 
-const postPositions = [
-  [23, 67],
-  [39, 82],
-  [61, 82],
-  [77, 67],
-  [18, 48],
-  [82, 48],
-  [34, 20],
-  [66, 20],
-  [50, 90],
-  [10, 60],
-  [90, 60],
-  [50, 12],
-];
-
-const tagPositions = [
-  [10, 24],
-  [90, 24],
-  [12, 78],
-  [88, 78],
-  [30, 10],
-  [70, 10],
-  [30, 94],
-  [70, 94],
-];
+const sphere = {
+  rotX: -0.22,
+  rotY: 0.36,
+  velocityX: 0.0007,
+  velocityY: 0.0015,
+  zoom: 1,
+  draggingCanvas: false,
+  draggingNode: null,
+  nodeMoved: false,
+  suppressClick: false,
+  lastX: 0,
+  lastY: 0,
+  nodePoints: new Map(),
+};
 
 function activeCity() {
   return cities.find((city) => city.slug === state.city) || cities[0];
@@ -118,6 +114,35 @@ function activeTopic() {
 
 function cleanTag(tag) {
   return tag.replace(/^#+/, "").trim();
+}
+
+function thumbnailForPost(post) {
+  if (post.thumbnailUrl) return post.thumbnailUrl;
+  const caption = encodeURIComponent((post.caption || post.handle || "DataNode").slice(0, 80));
+  const hue = Array.from(post.id || post.handle || "post").reduce((sum, char) => sum + char.charCodeAt(0), 0) % 360;
+  return `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' x2='1' y1='0' y2='1'%3E%3Cstop stop-color='hsl(${hue},55%25,28%25)'/%3E%3Cstop offset='1' stop-color='hsl(${(hue + 52) % 360},58%25,18%25)'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='120' height='120' fill='url(%23g)'/%3E%3Ccircle cx='90' cy='24' r='24' fill='rgba(255,255,255,.18)'/%3E%3Cpath d='M16 82 42 54l20 19 13-13 29 32v16H16z' fill='rgba(255,255,255,.28)'/%3E%3Ctext x='12' y='22' fill='white' font-family='Arial' font-size='9' font-weight='700'%3E${caption}%3C/text%3E%3C/svg%3E`;
+}
+
+function pointFromLatLng(lat, lng) {
+  const phi = (lat * Math.PI) / 180;
+  const theta = (lng * Math.PI) / 180;
+  const ringRadius = Math.cos(phi);
+  return {
+    x: Math.cos(theta) * ringRadius,
+    y: Math.sin(phi),
+    z: Math.sin(theta) * ringRadius,
+  };
+}
+
+function gridIntersectionPoint(index, total) {
+  const lat = sphereLatitudes[index % sphereLatitudes.length];
+  const lng = sphereLongitudes[(index * 5 + Math.floor(index / sphereLatitudes.length) * 2) % sphereLongitudes.length];
+  return pointFromLatLng(lat, lng + (total > sphereLongitudes.length ? 0 : 15));
+}
+
+function normalizePoint(point) {
+  const length = Math.hypot(point.x, point.y, point.z) || 1;
+  return { x: point.x / length, y: point.y / length, z: point.z / length };
 }
 
 function postsForState() {
@@ -164,6 +189,7 @@ async function loadSupabasePosts() {
     "metadata",
     "cities(slug,name_ko,name_en)",
     "topics(slug,label_ko)",
+    "post_media(media_url)",
     "post_hashtags(hashtags(normalized_tag))",
   ].join(",");
   const rows = await fetchSupabaseRows(
@@ -178,10 +204,12 @@ async function loadSupabasePosts() {
     const hashtags = (row.post_hashtags || [])
       .map((entry) => entry?.hashtags?.normalized_tag)
       .filter(Boolean);
+    const media = row.post_media || [];
 
     return {
       id: row.id,
       sourceUrl: row.source_url,
+      thumbnailUrl: media[0]?.media_url,
       citySlug: city.slug,
       topicSlug: topic.slug,
       cityName: city.name_ko || city.slug,
@@ -215,7 +243,7 @@ function buildGraph() {
   const posts = postsForState();
   const tags = topTags(posts);
   const nodes = [
-    { id: "root", kind: "root", label: `${city.ko} ${topic.ko}`, sub: "Search root", x: 50, y: 50, size: 132 },
+    { id: "root", kind: "root", label: `${city.ko} ${topic.ko}`, sub: "Search root", x: 50, y: 50, size: 92 },
     { id: `city:${city.slug}`, kind: "city", label: city.ko, sub: city.en, x: 24, y: 28, size: 96 },
     { id: `topic:${topic.slug}`, kind: "topic", label: topic.ko, sub: topic.slug, x: 76, y: 28, size: 96 },
   ];
@@ -225,17 +253,15 @@ function buildGraph() {
   ];
 
   posts.slice(0, 12).forEach((post, index) => {
-    const [x, y] = postPositions[index] || [50, 50];
     const id = `post:${post.id}`;
-    nodes.push({ id, kind: "post", label: `@${post.handle}`, sub: post.query, x, y, size: 84, post });
+    nodes.push({ id, kind: "post", label: `@${post.handle}`, sub: post.query, size: 58, post });
     edges.push({ id: `root-${id}`, from: "root", to: id, tone: "primary" });
     edges.push({ id: `topic-${id}`, from: `topic:${topic.slug}`, to: id, tone: "muted" });
   });
 
   tags.forEach((tag, index) => {
-    const [x, y] = tagPositions[index] || [50, 50];
     const id = `tag:${tag}`;
-    nodes.push({ id, kind: "tag", label: `#${tag}`, sub: "hashtag", x, y, size: 68 });
+    nodes.push({ id, kind: "tag", label: `#${tag}`, sub: "hashtag", size: 44 });
     edges.push({ id: `root-${id}`, from: "root", to: id, tone: "tag" });
     posts.forEach((post) => {
       if (post.hashtags.map(cleanTag).includes(tag)) {
@@ -303,44 +329,273 @@ function renderFilters() {
   });
 }
 
+function assignSpherePoints(graph) {
+  const shellNodes = graph.nodes.filter((node) => node.id !== "root");
+  shellNodes.forEach((node, index) => {
+    const point = gridIntersectionPoint(index, Math.max(shellNodes.length, 1));
+    node.point = sphere.nodePoints.get(node.id) || point;
+    sphere.nodePoints.set(node.id, node.point);
+  });
+  const root = graph.nodes.find((node) => node.id === "root");
+  if (root) root.point = { x: 0, y: 0, z: 0 };
+}
+
+function projectedPoint(node, rect) {
+  const projected = projectSpherePoint(node.point || { x: 0, y: 0, z: 0 }, rect);
+  return {
+    ...projected,
+    scale: node.id === "root" ? 1 : Math.max(0.58, projected.perspective),
+    alpha: node.id === "root" ? 1 : 0.42 + Math.max(0, projected.z) * 0.42,
+  };
+}
+
+function projectSpherePoint(base, rect) {
+  const radius = Math.min(rect.width, rect.height) * 0.34 * sphere.zoom;
+  const sinX = Math.sin(sphere.rotX);
+  const cosX = Math.cos(sphere.rotX);
+  const sinY = Math.sin(sphere.rotY);
+  const cosY = Math.cos(sphere.rotY);
+  const y1 = base.y * cosX - base.z * sinX;
+  const z1 = base.y * sinX + base.z * cosX;
+  const x2 = base.x * cosY + z1 * sinY;
+  const z2 = -base.x * sinY + z1 * cosY;
+  const perspective = 1.55 / (1.95 - z2);
+  return {
+    x: rect.width / 2 + x2 * radius * perspective,
+    y: rect.height / 2 + y1 * radius * perspective,
+    z: z2,
+    perspective,
+  };
+}
+
+function buildSphereGridLines() {
+  const lines = [];
+  const segmentCount = 96;
+
+  sphereLatitudes.forEach((lat) => {
+    const points = Array.from({ length: segmentCount + 1 }, (_, index) => {
+      const lng = (index / segmentCount) * 360;
+      return pointFromLatLng(lat, lng);
+    });
+    lines.push({ kind: "latitude", points });
+  });
+
+  sphereLongitudes.forEach((lng) => {
+    const points = Array.from({ length: segmentCount + 1 }, (_, index) => {
+      const lat = -90 + (index / segmentCount) * 180;
+      return pointFromLatLng(lat, lng);
+    });
+    lines.push({ kind: "longitude", points });
+  });
+
+  return lines;
+}
+
+function interpolateSurfacePoints(from, to, steps = 18) {
+  if (!from || !to) return [];
+  const fromRoot = from.id === "root";
+  const toRoot = to.id === "root";
+  if (fromRoot || toRoot) {
+    const surface = fromRoot ? to.point : from.point;
+    return fromRoot ? [{ x: 0, y: 0, z: 0 }, surface] : [surface, { x: 0, y: 0, z: 0 }];
+  }
+
+  return Array.from({ length: steps + 1 }, (_, index) => {
+    const t = index / steps;
+    return normalizePoint({
+      x: from.point.x * (1 - t) + to.point.x * t,
+      y: from.point.y * (1 - t) + to.point.y * t,
+      z: from.point.z * (1 - t) + to.point.z * t,
+    });
+  });
+}
+
+function updateSphereFrame() {
+  if (!currentGraph) return;
+  if (!sphere.draggingCanvas && !sphere.draggingNode) {
+    sphere.rotX += sphere.velocityX;
+    sphere.rotY += sphere.velocityY;
+  }
+
+  const canvas = document.getElementById("graphCanvas");
+  const edgeLayer = document.getElementById("edgeLayer");
+  const rect = canvas.getBoundingClientRect();
+  const projected = new Map(currentGraph.nodes.map((node) => [node.id, projectedPoint(node, rect)]));
+  edgeLayer.setAttribute("viewBox", `0 0 ${Math.max(rect.width, 1)} ${Math.max(rect.height, 1)}`);
+
+  currentGraph.gridLines?.forEach((gridLine) => {
+    const path = gridLine.points.map((point) => {
+      const projectedPoint = projectSpherePoint(point, rect);
+      return `${projectedPoint.x.toFixed(1)},${projectedPoint.y.toFixed(1)}`;
+    });
+    gridLine.element.setAttribute("points", path.join(" "));
+  });
+
+  currentGraph.edges.forEach((edge) => {
+    const line = edge.element;
+    if (!line) return;
+    const path = edge.surfacePoints.map((point) => {
+      const projectedSurfacePoint = projectSpherePoint(point, rect);
+      return `${projectedSurfacePoint.x.toFixed(1)},${projectedSurfacePoint.y.toFixed(1)}`;
+    });
+    const from = projected.get(edge.from);
+    const to = projected.get(edge.to);
+    line.setAttribute("points", path.join(" "));
+    line.style.opacity = String(Number(line.dataset.baseOpacity || 0.3) * Math.min(from?.alpha ?? 1, to?.alpha ?? 1));
+  });
+
+  currentGraph.nodes.forEach((node) => {
+    if (!node.element) return;
+    const pos = projected.get(node.id);
+    const selected = state.selected === node.id;
+    const size = node.size * pos.scale;
+    node.element.style.width = `${size}px`;
+    node.element.style.height = `${size}px`;
+    node.element.style.transform = `translate3d(${pos.x - size / 2}px, ${pos.y - size / 2}px, 0) scale(${selected ? 1.06 : 1})`;
+    node.element.style.opacity = String(pos.alpha);
+    node.element.style.zIndex = String(Math.round(100 + pos.z * 50 + (selected ? 100 : 0)));
+  });
+}
+
+function startAnimationLoop() {
+  if (animationStarted) return;
+  animationStarted = true;
+  const tick = () => {
+    updateSphereFrame();
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+function installSphereControls() {
+  const canvas = document.getElementById("graphCanvas");
+  if (canvas.dataset.sphereControls === "ready") return;
+  canvas.dataset.sphereControls = "ready";
+
+  canvas.addEventListener("pointerdown", (event) => {
+    if (event.target.closest(".node")) return;
+    sphere.draggingCanvas = true;
+    sphere.lastX = event.clientX;
+    sphere.lastY = event.clientY;
+    canvas.setPointerCapture(event.pointerId);
+  });
+
+  canvas.addEventListener("pointermove", (event) => {
+    if (sphere.draggingCanvas) {
+      const dx = event.clientX - sphere.lastX;
+      const dy = event.clientY - sphere.lastY;
+      sphere.rotY += dx * 0.006;
+      sphere.rotX -= dy * 0.006;
+      sphere.velocityY = dx * 0.00008;
+      sphere.velocityX = -dy * 0.00008;
+      sphere.lastX = event.clientX;
+      sphere.lastY = event.clientY;
+      return;
+    }
+    if (sphere.draggingNode && currentGraph) {
+      const dx = event.clientX - sphere.lastX;
+      const dy = event.clientY - sphere.lastY;
+      if (Math.hypot(dx, dy) > 4) sphere.nodeMoved = true;
+      const rect = canvas.getBoundingClientRect();
+      const node = currentGraph.nodes.find((entry) => entry.id === sphere.draggingNode);
+      if (!node || node.id === "root") return;
+      const radius = Math.min(rect.width, rect.height) * 0.34 * sphere.zoom;
+      const nx = Math.max(-0.92, Math.min(0.92, (event.clientX - rect.left - rect.width / 2) / radius));
+      const ny = Math.max(-0.92, Math.min(0.92, (event.clientY - rect.top - rect.height / 2) / radius));
+      const z = Math.sqrt(Math.max(0.08, 1 - nx * nx - ny * ny));
+      node.point = normalizePoint({ x: nx, y: ny, z });
+      sphere.nodePoints.set(node.id, node.point);
+    }
+  });
+
+  window.addEventListener("pointerup", () => {
+    sphere.draggingCanvas = false;
+    if (sphere.draggingNode && sphere.nodeMoved) {
+      sphere.suppressClick = true;
+      setTimeout(() => {
+        sphere.suppressClick = false;
+      }, 0);
+    }
+    sphere.draggingNode = null;
+    sphere.nodeMoved = false;
+  });
+
+  canvas.addEventListener(
+    "wheel",
+    (event) => {
+      event.preventDefault();
+      const next = sphere.zoom + (event.deltaY > 0 ? -0.08 : 0.08);
+      sphere.zoom = Math.max(0.62, Math.min(1.72, next));
+    },
+    { passive: false },
+  );
+}
+
 function renderGraph(graph) {
   const edgeLayer = document.getElementById("edgeLayer");
   const nodeLayer = document.getElementById("nodeLayer");
   edgeLayer.innerHTML = "";
   nodeLayer.innerHTML = "";
+  assignSpherePoints(graph);
+  graph.gridLines = buildSphereGridLines();
+  currentGraph = graph;
   const related = relatedIds(state.selected, graph.edges);
+
+  graph.gridLines.forEach((gridLine) => {
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    line.setAttribute("fill", "none");
+    line.setAttribute("vector-effect", "non-scaling-stroke");
+    line.classList.add("sphere-grid", gridLine.kind);
+    gridLine.element = line;
+    edgeLayer.appendChild(line);
+  });
 
   graph.edges.forEach((edge) => {
     const from = graph.nodes.find((node) => node.id === edge.from);
     const to = graph.nodes.find((node) => node.id === edge.to);
     if (!from || !to) return;
-    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    line.setAttribute("x1", from.x);
-    line.setAttribute("y1", from.y);
-    line.setAttribute("x2", to.x);
-    line.setAttribute("y2", to.y);
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    const isRootEdge = edge.from === "root" || edge.to === "root";
+    line.setAttribute("fill", "none");
     line.setAttribute("vector-effect", "non-scaling-stroke");
     line.setAttribute("stroke-width", related.has(from.id) && related.has(to.id) ? "2" : "1");
-    line.setAttribute("opacity", related.has(from.id) && related.has(to.id) ? "0.9" : "0.2");
+    line.dataset.baseOpacity = isRootEdge ? "0.16" : related.has(from.id) && related.has(to.id) ? "0.78" : "0.28";
     line.setAttribute("stroke", edge.tone === "primary" ? "#f6c85f" : edge.tone === "tag" ? "#5bb7d5" : "#62748d");
-    line.classList.add("edge");
+    line.classList.add("edge", isRootEdge ? "radial" : "surface");
+    edge.element = line;
+    edge.surfacePoints = interpolateSurfacePoints(from, to);
     edgeLayer.appendChild(line);
   });
 
   graph.nodes.forEach((node) => {
     const button = document.createElement("button");
     button.className = `node ${node.kind} ${state.selected === node.id ? "selected" : ""} ${related.has(node.id) ? "" : "dimmed"}`;
-    button.style.left = `${node.x}%`;
-    button.style.top = `${node.y}%`;
-    button.style.width = `${node.size}px`;
-    button.style.height = `${node.size}px`;
-    button.innerHTML = `<span class="node-title">${node.label}</span>${node.sub ? `<span class="node-sub">${node.sub}</span>` : ""}`;
+    button.innerHTML =
+      node.kind === "post"
+        ? `<span class="node-thumb"></span><span class="node-title">${node.label}</span>`
+        : `<span class="node-title">${node.label}</span>${node.sub ? `<span class="node-sub">${node.sub}</span>` : ""}`;
+    const thumb = button.querySelector(".node-thumb");
+    if (thumb) thumb.style.backgroundImage = `url("${thumbnailForPost(node.post)}")`;
     button.addEventListener("click", () => {
+      if (sphere.suppressClick) return;
       state.selected = node.id;
       render();
     });
+    button.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+      sphere.draggingNode = node.id;
+      sphere.nodeMoved = false;
+      sphere.lastX = event.clientX;
+      sphere.lastY = event.clientY;
+      state.selected = node.id;
+      button.setPointerCapture(event.pointerId);
+    });
+    node.element = button;
     nodeLayer.appendChild(button);
   });
+  installSphereControls();
+  startAnimationLoop();
+  updateSphereFrame();
 }
 
 function renderDetail(graph) {
