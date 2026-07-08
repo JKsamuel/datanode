@@ -19,16 +19,16 @@ const cities = [
 const cityFilters = [allCity, ...cities];
 
 const topics = [
-  { slug: "rent-real-estate", ko: "렌트/부동산", terms: ["렌트", "부동산", "월세", "집구하기", "콘도", "room", "rent", "lease", "housing"] },
-  { slug: "immigration", ko: "이민", terms: ["이민", "영주권", "비자", "워크퍼밋", "pr", "immigration", "visa", "permit"] },
-  { slug: "jobs", ko: "일자리/커리어", terms: ["일자리", "취업", "커리어", "구인", "알바", "job", "career", "resume"] },
-  { slug: "finance", ko: "금융/생활비", terms: ["금융", "생활비", "세금", "은행", "크레딧", "finance", "cost", "tax", "bank"] },
-  { slug: "food", ko: "맛집/카페", terms: ["맛집", "카페", "브런치", "식당", "라멘", "디저트", "food", "cafe", "restaurant", "brunch"] },
-  { slug: "events", ko: "이벤트", terms: ["이벤트", "행사", "축제", "모임", "event", "festival", "popup"] },
-  { slug: "education", ko: "교육/유학", terms: ["교육", "유학", "학교", "컬리지", "대학교", "study", "college", "university"] },
-  { slug: "transportation", ko: "교통/차", terms: ["교통", "차", "자동차", "운전", "보험", "transit", "car", "driver"] },
-  { slug: "healthcare", ko: "의료", terms: ["의료", "병원", "약국", "클리닉", "health", "clinic", "hospital", "pharmacy"] },
-  { slug: "travel-outdoors", ko: "여행/아웃도어", terms: ["여행", "하이킹", "캠핑", "근교", "travel", "hiking", "camping", "trip"] },
+  { slug: "rent-real-estate", ko: "렌트/부동산", en: "Rent / Real Estate", terms: ["렌트", "부동산", "월세", "집구하기", "콘도", "room", "rent", "lease", "housing"] },
+  { slug: "immigration", ko: "이민", en: "Immigration", terms: ["이민", "영주권", "비자", "워크퍼밋", "pr", "immigration", "visa", "permit"] },
+  { slug: "jobs", ko: "일자리/커리어", en: "Jobs / Career", terms: ["일자리", "취업", "커리어", "구인", "알바", "job", "career", "resume"] },
+  { slug: "finance", ko: "금융/생활비", en: "Finance / Cost of Living", terms: ["금융", "생활비", "세금", "은행", "크레딧", "finance", "cost", "tax", "bank"] },
+  { slug: "food", ko: "맛집/카페", en: "Food / Cafes", terms: ["맛집", "카페", "브런치", "식당", "라멘", "디저트", "food", "cafe", "restaurant", "brunch"] },
+  { slug: "events", ko: "이벤트", en: "Events", terms: ["이벤트", "행사", "축제", "모임", "event", "festival", "popup"] },
+  { slug: "education", ko: "교육/유학", en: "Education", terms: ["교육", "유학", "학교", "컬리지", "대학교", "study", "college", "university"] },
+  { slug: "transportation", ko: "교통/차", en: "Transportation", terms: ["교통", "차", "자동차", "운전", "보험", "transit", "car", "driver"] },
+  { slug: "healthcare", ko: "의료", en: "Healthcare", terms: ["의료", "병원", "약국", "클리닉", "health", "clinic", "hospital", "pharmacy"] },
+  { slug: "travel-outdoors", ko: "여행/아웃도어", en: "Travel / Outdoors", terms: ["여행", "하이킹", "캠핑", "근교", "travel", "hiking", "camping", "trip"] },
 ];
 
 const fallbackPosts = [
@@ -36,46 +36,56 @@ const fallbackPosts = [
     id: "ramen",
     sourceUrl: "https://www.instagram.com/explore/tags/torontoramen/",
     handle: "toronto.foodmap",
-    caption: "다운타운 라멘, 웨이팅 있는 일본식 라멘집, 늦은 저녁에도 인기.",
-    query: "#토론토맛집",
-    hashtags: ["토론토맛집", "torontoramen", "downtown", "ramen"],
+    caption: "Downtown ramen spot with evening demand and wait-time signals.",
+    query: "#torontofood",
+    hashtags: ["torontofood", "torontoramen", "downtown", "ramen"],
     score: 86,
+    status: "approved",
+    publishedAt: "2026-06-18T12:00:00Z",
   },
   {
     id: "brunch",
     sourceUrl: "https://www.instagram.com/explore/tags/torontobrunch/",
     handle: "queenwest.table",
-    caption: "Queen West 브런치 카페. 주말 예약과 디저트 메뉴 언급이 많은 포스트.",
+    caption: "Queen West brunch cafe with weekend reservation and dessert mentions.",
     query: "Toronto brunch",
     hashtags: ["torontobrunch", "queenwest", "cafe", "dessert"],
     score: 78,
+    status: "approved",
+    publishedAt: "2026-06-20T12:00:00Z",
   },
   {
     id: "koreanbbq",
     sourceUrl: "https://www.instagram.com/explore/tags/koreanbbq/",
     handle: "kfood.to",
-    caption: "North York 한식 고깃집. 단체 모임, 주차, 반찬 키워드와 연결.",
-    query: "토론토 한식",
-    hashtags: ["한식맛집", "koreanbbq", "northyork", "토론토맛집"],
+    caption: "North York Korean BBQ post connected to group dining, parking, and side dish signals.",
+    query: "Toronto Korean BBQ",
+    hashtags: ["koreanbbq", "northyork", "torontofood"],
     score: 82,
+    status: "approved",
+    publishedAt: "2026-06-21T12:00:00Z",
   },
   {
     id: "dessert",
     sourceUrl: "https://www.instagram.com/explore/tags/torontodessert/",
     handle: "sweetspots.ca",
-    caption: "디저트와 베이커리 중심 포스트. 카페 투어 노드로 확장 가능.",
-    query: "#캐나다디저트",
-    hashtags: ["torontodessert", "bakery", "cafe", "캐나다디저트"],
+    caption: "Dessert and bakery signal that can expand into cafe-tour nodes.",
+    query: "#canadadessert",
+    hashtags: ["torontodessert", "bakery", "cafe", "canadadessert"],
     score: 74,
+    status: "approved",
+    publishedAt: "2026-06-22T12:00:00Z",
   },
   {
     id: "sushi",
     sourceUrl: "https://www.instagram.com/explore/tags/vancouverfood/",
     handle: "westcoast.bites",
-    caption: "스시, 이자카야, 늦은 저녁 식사 키워드가 함께 등장하는 포스트.",
+    caption: "Sushi, izakaya, and late-night dining keywords appear together.",
     query: "#vancouverfood",
     hashtags: ["vancouverfood", "sushi", "izakaya", "datenight"],
     score: 80,
+    status: "approved",
+    publishedAt: "2026-06-19T12:00:00Z",
   },
 ];
 
@@ -84,8 +94,10 @@ const state = {
   topic: null,
   selected: "root",
   expandedPost: null,
-  query: "해밀턴",
-  source: "mock data",
+  query: "Hamilton",
+  source: "Mock data",
+  view: window.location.hash === "#feed" ? "feed" : "graph",
+  feedSort: "date",
 };
 
 let basePosts = fallbackPosts;
@@ -238,10 +250,10 @@ function postsForState() {
   return basePosts.map((post) => ({
     ...post,
     id: `${city.slug}-${state.topic || "all"}-${post.id}`,
-    cityName: city.slug === allCity.slug ? post.cityName || "Toronto" : city.ko,
-    topicName: activeTopic()?.ko || post.topicName || "소셜 신호",
+    cityName: city.slug === allCity.slug ? post.cityName || "Toronto" : city.en,
+    topicName: activeTopic()?.en || post.topicName || "Social Signals",
     handle: city.slug === allCity.slug || city.slug === "toronto" ? post.handle : `${city.slug}.${post.handle.split(".")[0]}`,
-    query: city.slug === allCity.slug ? post.query : post.query.replace("토론토", city.ko),
+    query: city.slug === allCity.slug ? post.query : post.query.replace("Toronto", city.en),
     hashtags: Array.from(new Set([city.slug === allCity.slug ? "canada" : city.slug, ...post.hashtags])),
   }));
 }
@@ -272,9 +284,12 @@ async function loadSupabasePosts() {
     "author_handle",
     "caption",
     "score",
+    "status",
+    "source_published_at",
+    "discovered_at",
     "metadata",
     "cities(slug,name_ko,name_en)",
-    "topics(slug,label_ko)",
+    "topics(slug,label_ko,label_en)",
     "post_media(media_url)",
     "post_hashtags(hashtags(normalized_tag))",
   ].join(",");
@@ -299,13 +314,15 @@ async function loadSupabasePosts() {
       thumbnailUrl: media[0]?.media_url,
       citySlug: city.slug,
       topicSlug: topic.slug,
-      cityName: city.name_ko || city.slug,
-      topicName: topic.label_ko || topic.slug,
+      cityName: city.name_en || city.slug,
+      topicName: topic.label_en || topic.slug,
       handle: row.author_handle || "instagram",
       caption: row.caption || row.source_url,
-      query: row.metadata?.query || topic.label_ko || "Instagram",
+      query: row.metadata?.query || topic.label_en || "Instagram",
       hashtags,
       score: Math.round(Number(row.score || 0) * 100),
+      status: row.status || "approved",
+      publishedAt: row.source_published_at || row.discovered_at || null,
     };
   });
 }
@@ -342,11 +359,11 @@ function topTags(posts) {
 }
 
 const clusterRules = [
-  { id: "housing-cost", label: "비용/가격", terms: ["렌트", "월세", "가격", "비용", "rent", "cost", "deposit", "fee"] },
-  { id: "area", label: "지역/동네", terms: ["다운타운", "노스욕", "North York", "Scarborough", "지역", "동네", "주차", "parking"] },
-  { id: "recommendation", label: "추천/후기", terms: ["추천", "후기", "맛집", "카페", "브런치", "restaurant", "cafe", "popular"] },
-  { id: "risk", label: "주의/문제", terms: ["사기", "주의", "계약", "문제", "어렵", "scam", "lease", "issue"] },
-  { id: "community", label: "질문/커뮤니티", terms: ["질문", "고민", "찾", "구해", "모임", "정보", "question", "looking"] },
+  { id: "housing-cost", label: "Cost / Pricing", terms: ["렌트", "월세", "가격", "비용", "rent", "cost", "deposit", "fee"] },
+  { id: "area", label: "Area / Neighborhood", terms: ["다운타운", "노스욕", "North York", "Scarborough", "지역", "동네", "주차", "parking"] },
+  { id: "recommendation", label: "Recommendations / Reviews", terms: ["추천", "후기", "맛집", "카페", "브런치", "restaurant", "cafe", "popular"] },
+  { id: "risk", label: "Risks / Issues", terms: ["사기", "주의", "계약", "문제", "어렵", "scam", "lease", "issue"] },
+  { id: "community", label: "Questions / Community", terms: ["질문", "고민", "찾", "구해", "모임", "정보", "question", "looking"] },
 ];
 
 function clusterForPost(post) {
@@ -354,7 +371,7 @@ function clusterForPost(post) {
   return (
     clusterRules.find((cluster) => cluster.terms.some((term) => text.includes(term.toLowerCase()))) || {
       id: "signals",
-      label: "관련 신호",
+      label: "Related Signals",
       terms: [],
     }
   );
@@ -363,6 +380,25 @@ function clusterForPost(post) {
 function truncate(text, limit = 120) {
   const value = (text || "").replace(/\s+/g, " ").trim();
   return value.length > limit ? `${value.slice(0, limit - 1)}…` : value;
+}
+
+function formatDate(value) {
+  if (!value) return "Unknown date";
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "Unknown date";
+  return new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  }).format(date);
+}
+
+function sortedFeedPosts(posts) {
+  const copy = [...posts];
+  if (state.feedSort === "score") {
+    return copy.sort((a, b) => Number(b.score || 0) - Number(a.score || 0) || new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0));
+  }
+  return copy.sort((a, b) => new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0) || Number(b.score || 0) - Number(a.score || 0));
 }
 
 const keywordStopwords = new Set([
@@ -515,20 +551,20 @@ function buildExpansionBranches(selectedPost, posts, edges = []) {
       id: `branch:edge:${edgeType}`,
       label,
       sub,
-      body: `${entries.length}개 포스트가 저장된 ${sub} edge로 연결됩니다.`,
+      body: `${entries.length} posts are connected by the stored ${sub} edge.`,
       relatedIds: entries.sort((a, b) => b.weight - a.weight).map((entry) => entry.postId),
       query,
     });
   };
 
-  addStoredBranch("similar_caption", "유사 문맥", "similar caption", selectedPost.query || selectedPost.topicName);
+  addStoredBranch("similar_caption", "Similar Context", "similar caption", selectedPost.query || selectedPost.topicName);
 
   const sameAuthor = posts.filter((post) => post.id !== selectedPost.id && post.handle === selectedPost.handle);
   addBranch({
     id: `branch:author:${selectedPost.handle}`,
     label: `@${selectedPost.handle}`,
     sub: "same author",
-    body: `${sameAuthor.length}개 포스트가 같은 작성자와 연결됩니다.`,
+    body: `${sameAuthor.length} posts are connected to the same author.`,
     relatedIds: sameAuthor.map((post) => post.id),
     query: `@${selectedPost.handle}`,
   });
@@ -540,7 +576,7 @@ function buildExpansionBranches(selectedPost, posts, edges = []) {
       id: `branch:tag:${clean}`,
       label: `#${clean}`,
       sub: "shared hashtag",
-      body: `${related.length}개 포스트가 이 해시태그를 공유합니다.`,
+      body: `${related.length} posts share this hashtag.`,
       relatedIds: related.map((post) => post.id),
       query: `#${clean}`,
     });
@@ -552,7 +588,7 @@ function buildExpansionBranches(selectedPost, posts, edges = []) {
     id: `branch:city:${selectedPost.citySlug}`,
     label: selectedPost.cityName || selectedPost.citySlug,
     sub: "same city",
-    body: `${Math.max(sameCity.length, storedSameCityIds.length)}개 포스트가 같은 도시 범위에 있습니다.`,
+    body: `${Math.max(sameCity.length, storedSameCityIds.length)} posts are in the same city scope.`,
     relatedIds: Array.from(new Set([...storedSameCityIds, ...sameCity.map((post) => post.id)])),
     query: selectedPost.cityName || selectedPost.citySlug,
   });
@@ -563,7 +599,7 @@ function buildExpansionBranches(selectedPost, posts, edges = []) {
     id: `branch:topic:${selectedPost.topicSlug}`,
     label: selectedPost.topicName || selectedPost.topicSlug,
     sub: "same signal class",
-    body: `${Math.max(sameTopic.length, storedSameTopicIds.length)}개 포스트가 같은 토픽으로 묶입니다.`,
+    body: `${Math.max(sameTopic.length, storedSameTopicIds.length)} posts are grouped under the same topic.`,
     relatedIds: Array.from(new Set([...storedSameTopicIds, ...sameTopic.map((post) => post.id)])),
     query: selectedPost.topicName || selectedPost.topicSlug,
   });
@@ -574,7 +610,7 @@ function buildExpansionBranches(selectedPost, posts, edges = []) {
       id: `branch:keyword:${token}`,
       label: token,
       sub: "context keyword",
-      body: `${count}개 포스트가 같은 문맥 키워드를 포함합니다.`,
+      body: `${count} posts contain the same context keyword.`,
       relatedIds: related.map((post) => post.id),
       query: token,
     });
@@ -583,9 +619,9 @@ function buildExpansionBranches(selectedPost, posts, edges = []) {
   if (branches.length === 0 && relatedByScore.length > 0) {
     addBranch({
       id: `branch:nearest:${selectedPost.id}`,
-      label: "가장 가까운 신호",
+      label: "Closest Signals",
       sub: "nearest posts",
-      body: "해시태그, 도시, 토픽, 문맥 점수를 합산한 연결입니다.",
+      body: "Connection score combines hashtags, city, topic, and context overlap.",
       relatedIds: relatedByScore.slice(0, 3).map((entry) => entry.post.id),
       query: selectedPost.query || selectedPost.topicName,
     });
@@ -607,10 +643,10 @@ function buildGraph() {
   const posts = postsForState();
   const city = activeCity();
   const topic = activeTopic();
-  const scopeLabel = topic ? `${city.ko} ${topic.ko}` : `${city.ko} 소셜 신호`;
+  const scopeLabel = topic ? `${city.en} ${topic.en || topic.ko}` : `${city.en} Social Signals`;
   const scopeBody = topic
-    ? `${city.ko}에서 ${topic.ko} 관련 SNS 신호를 클러스터별로 정리합니다.`
-    : `${city.ko}에서 수집된 SNS 포스트를 해시태그, 작성자, 문맥 기준으로 정리합니다.`;
+    ? `Organizes ${topic.en || topic.ko} social signals in ${city.en} by cluster.`
+    : `Organizes collected social posts in ${city.en} by hashtag, author, and context.`;
   const tags = topTags(posts);
   const keywords = interestingKeywords(posts, city, topic);
   const groupedPosts = new Map();
@@ -632,9 +668,9 @@ function buildGraph() {
       z: 60,
       w: 176,
       h: 78,
-      body: posts.length > 0 ? scopeBody : "이 도시에는 아직 승인된 수집 데이터가 없습니다.",
+      body: posts.length > 0 ? scopeBody : "No approved collected data is available for this city yet.",
     },
-    { id: `city:${city.slug}`, kind: "city", label: city.ko, sub: city.en, x: 50, y: 18, z: -20, w: 128, h: 48 },
+    { id: `city:${city.slug}`, kind: "city", label: city.en, sub: city.slug.toUpperCase(), x: 50, y: 18, z: -20, w: 128, h: 48 },
   ];
   const edges = [
     { id: "root-city", from: "root", to: `city:${city.slug}`, tone: "primary" },
@@ -691,7 +727,7 @@ function buildGraph() {
       kind: "keyword",
       label: keyword.kind === "hashtag" ? `#${keyword.label}` : keyword.label,
       sub: `${keyword.postIds.length} related posts`,
-      body: "이 키워드로 다시 검색해 다음 가지를 확장할 수 있습니다.",
+      body: "Search this keyword again to expand the next branch.",
       x: point.x,
       y: point.y,
       z: -90,
@@ -816,13 +852,13 @@ function renderFilters() {
   cityFilters.forEach((city) => {
     const button = document.createElement("button");
     button.className = `filter-button ${city.slug === state.city ? "active" : ""}`;
-    button.textContent = city.slug === allCity.slug ? "전체" : city.ko;
+    button.textContent = city.slug === allCity.slug ? "All" : city.en;
     button.addEventListener("click", () => {
       state.city = city.slug;
       state.selected = "root";
       state.expandedPost = null;
       state.topic = null;
-      document.getElementById("searchInput").value = city.slug === allCity.slug ? "캐나다" : city.ko;
+      document.getElementById("searchInput").value = city.slug === allCity.slug ? "Canada" : city.en;
       render();
     });
     cityButtons.appendChild(button);
@@ -1144,9 +1180,9 @@ function renderDetail(graph) {
   } else if (selected.branch) {
     selectedBody.innerHTML = `
       <div class="post-detail">
-        ${escapeHtml(selected.body || "선택한 연결 기준으로 관련 포스트를 보여줍니다.")}
+        ${escapeHtml(selected.body || "Shows posts related by the selected connection rule.")}
         <div class="tag-list">
-          <button class="tag-button" data-query="${escapeHtml(selected.branch.query || selected.label)}">이 기준으로 검색</button>
+          <button class="tag-button" data-query="${escapeHtml(selected.branch.query || selected.label)}">Search this rule</button>
         </div>
       </div>
     `;
@@ -1158,12 +1194,12 @@ function renderDetail(graph) {
     });
   } else if (selected.keyword) {
     const city = activeCity();
-    const nextQuery = city.slug === allCity.slug ? selected.keyword.query : `${city.ko} ${selected.keyword.query}`;
+    const nextQuery = city.slug === allCity.slug ? selected.keyword.query : `${city.en} ${selected.keyword.query}`;
     selectedBody.innerHTML = `
       <div class="post-detail">
-        ${escapeHtml(selected.keyword.postIds.length)}개 포스트에서 반복적으로 감지된 관심 키워드입니다.
+        This interest keyword appears across ${escapeHtml(selected.keyword.postIds.length)} posts.
         <div class="tag-list">
-          <button class="tag-button" data-query="${escapeHtml(nextQuery)}">이 키워드로 찾아가기</button>
+          <button class="tag-button" data-query="${escapeHtml(nextQuery)}">Explore this keyword</button>
         </div>
       </div>
     `;
@@ -1174,7 +1210,7 @@ function renderDetail(graph) {
       render();
     });
   } else {
-    selectedBody.textContent = "연결된 포스트, 해시태그, 도시 노드를 선택해 그래프의 다음 가지를 확인합니다.";
+    selectedBody.textContent = "Select a post, hashtag, or city node to inspect the next branch of the graph.";
   }
 
   const related = relatedPosts(selected, graph.posts);
@@ -1196,31 +1232,97 @@ function renderDetail(graph) {
   });
 }
 
+function renderFeed(graph) {
+  const feedView = document.getElementById("feedView");
+  const feedList = document.getElementById("feedList");
+  const feedTitle = document.getElementById("feedTitle");
+  if (!feedView || !feedList || !feedTitle) return;
+
+  const city = activeCity();
+  const topic = activeTopic();
+  const posts = sortedFeedPosts(graph.posts);
+  feedTitle.textContent = topic ? `${city.en} ${topic.en || topic.slug} Feed` : `${city.en} Feed`;
+  feedList.innerHTML = "";
+
+  if (posts.length === 0) {
+    feedList.innerHTML = `
+      <div class="feed-empty">
+        <div class="section-title">No Signals</div>
+        <p>No approved collected posts match the current query.</p>
+      </div>
+    `;
+    return;
+  }
+
+  posts.forEach((post) => {
+    const selected = state.selected === `post:${post.id}`;
+    const item = document.createElement("article");
+    item.className = `feed-item ${selected ? "selected" : ""}`;
+    item.innerHTML = `
+      <button class="feed-main" type="button" data-post-id="${escapeHtml(post.id)}">
+        <div class="feed-meta">
+          <span>@${escapeHtml(post.handle)}</span>
+          <span>${escapeHtml((post.platform || "post").toUpperCase())}</span>
+          <span>${escapeHtml(post.status || "approved")}</span>
+          <span>${escapeHtml(formatDate(post.publishedAt))}</span>
+        </div>
+        <div class="feed-caption">${escapeHtml(post.caption)}</div>
+        <div class="feed-tags">
+          <span>${escapeHtml(post.cityName || post.citySlug || "Unknown city")}</span>
+          <span>${escapeHtml(post.topicName || post.topicSlug || "Signal")}</span>
+          ${(post.hashtags || []).slice(0, 5).map((tag) => `<span>#${escapeHtml(cleanTag(tag))}</span>`).join("")}
+        </div>
+      </button>
+      <div class="feed-side">
+        <span class="feed-score">${escapeHtml(post.score)}</span>
+        ${post.sourceUrl ? `<a class="feed-link" href="${escapeHtml(post.sourceUrl)}" target="_blank" rel="noreferrer">Open Source</a>` : ""}
+      </div>
+    `;
+    item.querySelector(".feed-main")?.addEventListener("click", () => {
+      state.selected = `post:${post.id}`;
+      state.expandedPost = String(post.id);
+      render();
+    });
+    feedList.appendChild(item);
+  });
+}
+
+function renderViewChrome() {
+  const isFeed = state.view === "feed";
+  document.getElementById("feedView").hidden = !isFeed;
+  document.getElementById("graphCanvas").hidden = isFeed;
+  document.getElementById("feedNav").classList.toggle("active", isFeed);
+  document.getElementById("graphNav").classList.toggle("active", !isFeed);
+  document.querySelector(".hint").textContent = isFeed ? "SOURCE REVIEW ONLINE" : "ENTITY RESOLUTION ONLINE";
+}
+
 function renderSeeds() {
   const city = activeCity();
   const topic = activeTopic();
   const seeds = topic
     ? city.slug === allCity.slug
-      ? [`#canada${topic.slug}`, `#캐나다${topic.ko.replace("/", "")}`, `Canada ${topic.ko}`, `${topic.ko} Threads`, `Instagram ${topic.ko}`]
-      : [`#${city.slug}${topic.slug}`, `#${city.ko}${topic.ko.replace("/", "")}`, `${city.en} ${topic.ko}`, `${city.ko} 인스타`, `${city.en} social`]
+      ? [`#canada${topic.slug}`, `Canada ${topic.en || topic.slug}`, `${topic.en || topic.slug} Threads`, `Instagram ${topic.en || topic.slug}`, `${topic.slug} social`]
+      : [`#${city.slug}${topic.slug}`, `${city.en} ${topic.en || topic.slug}`, `${topic.en || topic.slug} Threads`, `Instagram ${topic.en || topic.slug}`, `${city.en} social`]
     : city.slug === allCity.slug
-      ? ["#canada", "#캐나다생활", "Canada social", "Canada Threads", "Instagram Canada"]
-      : [`#${city.slug}`, `#${city.ko}생활`, `${city.en} social`, `${city.ko} 인스타`, `${city.en} Threads`];
+      ? ["#canada", "Canada social", "Canada Threads", "Instagram Canada", "Canadian communities"]
+      : [`#${city.slug}`, `${city.en} life`, `${city.en} social`, `Instagram ${city.en}`, `${city.en} Threads`];
   document.getElementById("seedList").innerHTML = seeds.map((seed) => `<span class="seed">${seed}</span>`).join("");
 }
 
 function render() {
   const city = activeCity();
-  state.query = document.getElementById("searchInput").value.trim() || (city.slug === allCity.slug ? "캐나다" : city.ko);
+  state.query = document.getElementById("searchInput").value.trim() || (city.slug === allCity.slug ? "Canada" : city.en);
   const graph = buildGraph();
   const visibleNodeIds = new Set(graph.nodes.filter((node) => !node.hidden).map((node) => node.id));
   const visibleEdgeCount = graph.edges.filter((edge) => visibleNodeIds.has(edge.from) && visibleNodeIds.has(edge.to)).length;
   document.getElementById("queryBadge").textContent = state.query;
-  document.getElementById("nodeCount").textContent = `${visibleNodeIds.size} nodes`;
-  document.getElementById("edgeCount").textContent = `${visibleEdgeCount} links`;
+  document.getElementById("nodeCount").textContent = state.view === "feed" ? `${graph.posts.length} posts` : `${visibleNodeIds.size} nodes`;
+  document.getElementById("edgeCount").textContent = state.view === "feed" ? `${baseEdges.length} edges` : `${visibleEdgeCount} links`;
   document.querySelector(".badge.green").textContent = state.source;
+  renderViewChrome();
   renderFilters();
   renderGraph(graph);
+  renderFeed(graph);
   renderDetail(graph);
   renderSeeds();
 }
@@ -1236,6 +1338,23 @@ document.getElementById("searchInput").addEventListener("keydown", (event) => {
   if (event.key === "Enter") runSearch();
 });
 document.getElementById("searchButton").addEventListener("click", runSearch);
+document.getElementById("feedNav").addEventListener("click", () => {
+  state.view = "feed";
+});
+document.getElementById("graphNav").addEventListener("click", () => {
+  state.view = "graph";
+});
+window.addEventListener("hashchange", () => {
+  state.view = window.location.hash === "#feed" ? "feed" : "graph";
+  render();
+});
+document.querySelectorAll("[data-feed-sort]").forEach((button) => {
+  button.addEventListener("click", () => {
+    state.feedSort = button.dataset.feedSort || "date";
+    document.querySelectorAll("[data-feed-sort]").forEach((entry) => entry.classList.toggle("active", entry === button));
+    render();
+  });
+});
 
 (async function init() {
   try {

@@ -100,7 +100,7 @@ function includesTerm(text, term) {
 function detectLanguage(text) {
   const koCount = (text.match(/[\u3131-\u318e\uac00-\ud7a3]/g) ?? []).length;
   const latinCount = (text.match(/[a-z]/gi) ?? []).length;
-  if (koCount >= 8 || koCount >= latinCount * 0.25) return 'ko';
+  if (koCount > 0 && (koCount >= 8 || koCount >= latinCount * 0.25)) return 'ko';
   if (latinCount > 0) return 'en';
   return 'other';
 }
@@ -114,10 +114,13 @@ export function assessPostRelevance({ text, city, topic, sourceProfileHandle, so
   const queryTerms = [sourceQuery, sourceProfileHandle].filter(Boolean);
   const sourceProfileText = String(sourceProfileHandle ?? '').toLowerCase();
   const textForSignals = lower;
+  const language = detectLanguage(compact);
 
   if (compact.length < 8) {
     return { accepted: false, status: 'rejected', score: 0.05, language: 'other', reasons: ['caption_too_short'] };
   }
+
+  if (!['en', 'ko'].includes(language)) reasons.push('unsupported_language');
 
   const hasForeignExclusion = FOREIGN_EXCLUSION_PATTERNS.some((pattern) => pattern.test(compact));
   if (hasForeignExclusion) reasons.push('foreign_geo_exclusion');
@@ -139,9 +142,8 @@ export function assessPostRelevance({ text, city, topic, sourceProfileHandle, so
   if (!hasCityContext) reasons.push('missing_city_context');
   if (hasKoreaOnlySignal) reasons.push('korea_only_context');
 
-  const rejectedReasons = new Set(['foreign_geo_exclusion', 'non_city_hamilton_brand', 'missing_canada_context', 'missing_city_context', 'korea_only_context']);
+  const rejectedReasons = new Set(['unsupported_language', 'foreign_geo_exclusion', 'non_city_hamilton_brand', 'missing_canada_context', 'missing_city_context', 'korea_only_context']);
   const accepted = !reasons.some((reason) => rejectedReasons.has(reason));
-  const language = detectLanguage(compact);
   const score = Math.min(
     0.95,
     0.35 +

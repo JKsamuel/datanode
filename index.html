@@ -4,14 +4,14 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>DataNode Entity Graph</title>
-    <link rel="stylesheet" href="./styles.css?v=palantir-entity-6" />
+    <link rel="stylesheet" href="./styles.css?v=palantir-entity-8" />
   </head>
   <body>
     <header class="topbar">
       <a class="brand" href="./">DataNode</a>
       <nav class="nav">
-        <a href="#feed">Feed</a>
-        <a class="active" href="#graph">Entity Graph</a>
+        <a id="feedNav" href="#feed">Feed</a>
+        <a id="graphNav" class="active" href="#graph">Entity Graph</a>
       </nav>
     </header>
 
@@ -22,7 +22,7 @@
           <h1>City Signal Graph</h1>
           <label class="search">
             <span>⌕</span>
-            <input id="searchInput" value="해밀턴" aria-label="검색어" />
+            <input id="searchInput" value="Hamilton" aria-label="Search query" />
             <button id="searchButton" type="button">Run</button>
           </label>
         </section>
@@ -36,12 +36,26 @@
       <section class="workspace" id="graph">
         <div class="statusbar">
           <div class="status-left">
-            <span class="badge" id="queryBadge">해밀턴</span>
+            <span class="badge" id="queryBadge">Hamilton</span>
             <span class="badge cyan" id="nodeCount">0 nodes</span>
             <span class="badge cyan" id="edgeCount">0 links</span>
             <span class="badge green">mock data</span>
           </div>
           <div class="hint">ENTITY RESOLUTION ONLINE</div>
+        </div>
+
+        <div class="feed-view" id="feedView" hidden>
+          <div class="feed-header">
+            <div>
+              <div class="section-title">Collected Feed</div>
+              <h2 id="feedTitle">Hamilton Signals</h2>
+            </div>
+            <div class="feed-controls">
+              <button class="feed-sort active" type="button" data-feed-sort="date">Date</button>
+              <button class="feed-sort" type="button" data-feed-sort="score">Score</button>
+            </div>
+          </div>
+          <div class="feed-list" id="feedList"></div>
         </div>
 
         <div class="graph-canvas" id="graphCanvas">
@@ -78,7 +92,7 @@
       </aside>
     </main>
 
-    <script src="./config.js?v=palantir-entity-6"></script>
-    <script src="./app.js?v=palantir-entity-6"></script>
+    <script src="./config.js?v=palantir-entity-8"></script>
+    <script src="./app.js?v=palantir-entity-8"></script>
   </body>
 </html>
