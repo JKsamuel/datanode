@@ -10,6 +10,19 @@ import { SupabaseRestClient, assertWritableSupabase } from './lib/supabase-rest.
 
 loadEnv();
 
+const defaultCitySignalSeeds = [
+  'food',
+  'rent-real-estate',
+  'jobs',
+  'events',
+  'immigration',
+  'finance',
+  'education',
+  'transportation',
+  'healthcare',
+  'travel-outdoors',
+];
+
 function compactText(text, limit = 700) {
   return (text ?? '').replace(/\s+/g, ' ').trim().slice(0, limit);
 }
@@ -20,6 +33,25 @@ function looksLikePostUrl(url) {
 
 function jitteredDelayMs(baseMs, jitterRatio) {
   return Math.round(baseMs * (1 + Math.random() * Math.max(0, jitterRatio)));
+}
+
+function cutoffDateFromMonths(months) {
+  if (!months || months <= 0) return null;
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - months);
+  return cutoff;
+}
+
+function dateRangeMeta(sourcePublishedAt, cutoffDate, recentMonths) {
+  if (!cutoffDate) return null;
+  const publishedAt = sourcePublishedAt ? new Date(sourcePublishedAt) : null;
+  const publishedAtKnown = Boolean(publishedAt && Number.isFinite(publishedAt.getTime()));
+  return {
+    recent_months: recentMonths,
+    cutoff: cutoffDate.toISOString(),
+    published_at_known: publishedAtKnown,
+    within_range: publishedAtKnown ? publishedAt >= cutoffDate : true,
+  };
 }
 
 function isLikelyRateLimitError(error) {
@@ -55,6 +87,13 @@ async function extractOpenPostSignal(page, fallbackUrl) {
 async function collectPermalinksFromPage(page, url, timeoutMs) {
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
   await page.waitForTimeout(2200);
+  const loginGate = await page.evaluate(() => {
+    const text = document.body.innerText ?? '';
+    return location.pathname.startsWith('/accounts/login') || /Log into Instagram|Log in with Facebook|Create new account/.test(text);
+  });
+  if (loginGate) {
+    throw new Error('Instagram login required. Create a storage state with `npm run agent:login:instagram`, then rerun the collector.');
+  }
 
   for (let index = 0; index < 3; index += 1) {
     await page.evaluate(() => {
@@ -201,9 +240,11 @@ async function insertQuery(client, { runId, city, topic, query, resultCount, dry
   return rows[0];
 }
 
-async function upsertPosts(client, { city, topic, crawlQueryId, signals, dryRun }) {
+async function upsertPosts(client, { city, topic, crawlQueryId, signals, dryRun, cutoffDate, recentMonths }) {
   const rows = signals
     .map((signal) => {
+      const rangeMeta = dateRangeMeta(signal.sourcePublishedAt, cutoffDate, recentMonths);
+      if (rangeMeta && !rangeMeta.within_range) return null;
       const relevance = assessPostRelevance({
         text: [signal.caption, ...(signal.hashtags ?? []).map((tag) => `#${tag}`)].join(' '),
         city,
@@ -233,6 +274,7 @@ async function upsertPosts(client, { city, topic, crawlQueryId, signals, dryRun 
           source_profile_handle: signal.sourceProfileHandle,
           source_profile_label: signal.sourceProfileLabel,
           relevance_filter: relevance,
+          date_range: rangeMeta,
         },
       };
     })
@@ -246,7 +288,7 @@ export async function runCollector(options = {}) {
   const args = options.args ?? parseArgs();
   const dryRun = options.dryRun ?? args.flag('dry-run');
   const citySlugs = options.cities ?? args.list('cities', args.value('city') ? [args.value('city')] : ['toronto']);
-  const topicSlugs = options.topics ?? args.list('topics', args.value('topic') ? [args.value('topic')] : ['food']);
+  const topicSlugs = options.topics ?? args.list('topics', args.value('topic') ? [args.value('topic')] : defaultCitySignalSeeds);
   const queryLimit = options.queryLimit ?? args.int('queries', 8);
   const perQueryLimit = options.perQueryLimit ?? args.int('per-query', 8);
   const timeoutMs = options.timeoutMs ?? args.int('timeout-ms', 20000);
@@ -256,6 +298,8 @@ export async function runCollector(options = {}) {
   const delayJitterRatio = options.delayJitterRatio ?? Number.parseFloat(args.value('delay-jitter-ratio', '0.6'));
   const maxPostInspectionsPerQuery = options.maxPostInspectionsPerQuery ?? args.int('max-post-inspections-per-query', Math.max(perQueryLimit * 2, 6));
   const maxConsecutivePostOpenFailures = options.maxConsecutivePostOpenFailures ?? args.int('max-consecutive-post-open-failures', 2);
+  const recentMonths = options.recentMonths ?? (args.value('recent-months') ? args.int('recent-months', null) : null);
+  const cutoffDate = cutoffDateFromMonths(recentMonths);
   const headed = options.headed ?? args.flag('headed');
   const storageState = resolve(args.value('storage-state', process.env.INSTAGRAM_PLAYWRIGHT_STORAGE_STATE ?? 'agents/.instagram-storage-state.json'));
   if (!dryRun) assertWritableSupabase();
@@ -274,7 +318,7 @@ export async function runCollector(options = {}) {
         : await createCrawlRun(client, {
             cityId: city.id,
             topicId: topic.id,
-            metadata: { city: city.slug, topic: topic.slug, dryRun },
+            metadata: { collection_mode: 'city_keyword_graph', city: city.slug, seed_topic: topic.slug, recent_months: recentMonths, cutoff: cutoffDate?.toISOString() ?? null, dryRun },
           });
 
       let discovered = 0;
@@ -308,22 +352,22 @@ export async function runCollector(options = {}) {
           const uniqueSignals = Array.from(new Map(annotatedSignals.map((signal) => [signal.sourceUrl, signal])).values()).slice(0, perQueryLimit);
           discovered += uniqueSignals.length;
           const crawlQuery = await insertQuery(client, { runId: run.id, city, topic, query, resultCount: uniqueSignals.length, dryRun });
-          const postRows = await upsertPosts(client, { city, topic, crawlQueryId: crawlQuery.id, signals: uniqueSignals, dryRun });
+          const postRows = await upsertPosts(client, { city, topic, crawlQueryId: crawlQuery.id, signals: uniqueSignals, dryRun, cutoffDate, recentMonths });
           inserted += postRows.length;
         }
         if (!dryRun) {
           await completeCrawlRun(client, run.id, {
             status: 'completed',
-            metadata: { city: city.slug, topic: topic.slug, discovered, inserted },
+            metadata: { collection_mode: 'city_keyword_graph', city: city.slug, seed_topic: topic.slug, recent_months: recentMonths, cutoff: cutoffDate?.toISOString() ?? null, discovered, inserted },
           });
         }
-        summary.push({ platform: 'instagram', city: city.slug, topic: topic.slug, queries: queries.length, discovered, inserted, dryRun });
+        summary.push({ platform: 'instagram', collectionMode: 'city_keyword_graph', city: city.slug, seedTopic: topic.slug, recentMonths, queries: queries.length, discovered, inserted, dryRun });
       } catch (error) {
         if (!dryRun) {
           await completeCrawlRun(client, run.id, {
             status: 'failed',
             errorMessage: error instanceof Error ? error.message : String(error),
-            metadata: { city: city.slug, topic: topic.slug, discovered, inserted },
+            metadata: { collection_mode: 'city_keyword_graph', city: city.slug, seed_topic: topic.slug, recent_months: recentMonths, cutoff: cutoffDate?.toISOString() ?? null, discovered, inserted },
           });
         }
         throw error;
@@ -333,7 +377,7 @@ export async function runCollector(options = {}) {
     await browserBundle?.browser.close();
   }
 
-  return summary.sort((a, b) => `${a.city}:${a.topic}`.localeCompare(`${b.city}:${b.topic}`));
+  return summary.sort((a, b) => `${a.city}:${a.seedTopic}`.localeCompare(`${b.city}:${b.seedTopic}`));
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

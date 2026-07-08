@@ -9,11 +9,15 @@
     "agent:collector": "node agents/instagram-city-agent.js",
     "agent:threads": "node agents/threads-city-agent.js",
     "agent:enrich": "node agents/enrichment-agent.js",
+    "agent:review": "node agents/review-candidates-agent.js",
     "agent:graph": "node agents/graph-builder-agent.js",
     "agent:run": "node agents/run-city-agents.js",
-    "agent:smoke": "node agents/run-city-agents.js --dry-run --cities=toronto,vancouver --topics=food,rent-real-estate --concurrency=2",
-    "agent:all:smoke": "node agents/run-city-agents.js --dry-run --platforms=instagram,threads --cities=toronto,vancouver --topics=food,rent-real-estate --queries=3 --per-query=3 --concurrency=2",
-    "agent:threads:smoke": "node agents/threads-city-agent.js --dry-run --cities=toronto,vancouver --topics=food,rent-real-estate --queries=3 --per-query=3 --concurrency=2"
+    "agent:login:instagram": "node agents/save-storage-state.js --platform=instagram",
+    "agent:login:threads": "node agents/save-storage-state.js --platform=threads",
+    "agent:smoke": "node agents/run-city-agents.js --dry-run --cities=hamilton --queries=3 --per-query=3 --concurrency=2 --recent-months=3",
+    "agent:all:smoke": "node agents/run-city-agents.js --dry-run --platforms=instagram,threads --cities=hamilton --queries=3 --per-query=3 --concurrency=2 --recent-months=3",
+    "agent:threads:smoke": "node agents/threads-city-agent.js --dry-run --cities=hamilton --queries=3 --per-query=3 --concurrency=2 --recent-months=3",
+    "agent:hamilton": "node agents/run-city-agents.js --platforms=instagram,threads --cities=hamilton --queries=3 --per-query=3 --concurrency=1 --recent-months=3"
   },
   "devDependencies": {
     "playwright": "1.54.0"

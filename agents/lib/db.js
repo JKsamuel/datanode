@@ -11,6 +11,10 @@ const fallbackCities = [
   { id: 'local-city-victoria', slug: 'victoria', name_ko: '빅토리아', name_en: 'Victoria', province_code: 'BC', aliases: ['yyj', 'victoria bc'] },
   { id: 'local-city-waterloo-kitchener', slug: 'waterloo-kitchener', name_ko: '워털루/키치너', name_en: 'Waterloo/Kitchener', province_code: 'ON', aliases: ['waterloo', 'kitchener', 'kw', 'kwc'] },
   { id: 'local-city-mississauga', slug: 'mississauga', name_ko: '미시사가', name_en: 'Mississauga', province_code: 'ON', aliases: ['mississauga', '미시사가', 'GTA'] },
+  { id: 'local-city-hamilton', slug: 'hamilton', name_ko: '해밀턴', name_en: 'Hamilton', province_code: 'ON', aliases: ['hamilton', '해밀턴', 'hamilton ontario', '해밀턴 온타리오'] },
+  { id: 'local-city-burlington', slug: 'burlington', name_ko: '벌링턴', name_en: 'Burlington', province_code: 'ON', aliases: ['burlington', '벌링턴', 'burlington ontario'] },
+  { id: 'local-city-oakville', slug: 'oakville', name_ko: '옥빌', name_en: 'Oakville', province_code: 'ON', aliases: ['oakville', '옥빌', 'oakville ontario'] },
+  { id: 'local-city-saskatoon', slug: 'saskatoon', name_ko: '새스커툰', name_en: 'Saskatoon', province_code: 'SK', aliases: ['saskatoon', '새스커툰'] },
 ];
 
 const fallbackTopics = [

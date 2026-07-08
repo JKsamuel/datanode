@@ -80,11 +80,11 @@ const fallbackPosts = [
 ];
 
 const state = {
-  city: "toronto",
+  city: "hamilton",
   topic: null,
   selected: "root",
   expandedPost: null,
-  query: "토론토",
+  query: "해밀턴",
   source: "mock data",
 };
 
@@ -376,10 +376,33 @@ const keywordStopwords = new Set([
   "toronto",
   "vancouver",
   "canada",
+  "ontario",
   "with",
   "from",
   "that",
   "this",
+  "the",
+  "and",
+  "for",
+  "to",
+  "in",
+  "you",
+  "your",
+  "are",
+  "any",
+  "anyone",
+  "have",
+  "has",
+  "had",
+  "need",
+  "some",
+  "want",
+  "get",
+  "into",
+  "real",
+  "area",
+  "today",
+  "together",
 ]);
 
 function postText(post) {
@@ -571,6 +594,15 @@ function buildExpansionBranches(selectedPost, posts, edges = []) {
   return branches.slice(0, 5);
 }
 
+function radialPoint(index, total, radiusX, radiusY, startAngle = -Math.PI / 2) {
+  const count = Math.max(total, 1);
+  const angle = startAngle + (Math.PI * 2 * index) / count;
+  return {
+    x: 50 + Math.cos(angle) * radiusX,
+    y: 50 + Math.sin(angle) * radiusY,
+  };
+}
+
 function buildGraph() {
   const posts = postsForState();
   const city = activeCity();
@@ -596,23 +628,24 @@ function buildGraph() {
       label: scopeLabel,
       sub: `${posts.length} collected signals`,
       x: 50,
-      y: 48,
+      y: 50,
       z: 60,
-      w: 230,
-      h: 132,
+      w: 176,
+      h: 78,
       body: posts.length > 0 ? scopeBody : "이 도시에는 아직 승인된 수집 데이터가 없습니다.",
     },
-    { id: `city:${city.slug}`, kind: "city", label: city.ko, sub: city.en, x: 18, y: 15, z: -20, w: 150, h: 74 },
+    { id: `city:${city.slug}`, kind: "city", label: city.ko, sub: city.en, x: 50, y: 18, z: -20, w: 128, h: 48 },
   ];
   const edges = [
     { id: "root-city", from: "root", to: `city:${city.slug}`, tone: "primary" },
   ];
 
+  let postNodeIndex = 0;
+  const visiblePostTotal = posts.slice(0, 12).length;
   clusters.forEach((cluster, index) => {
-    const side = index % 2 === 0 ? -1 : 1;
-    const lane = Math.floor(index / 2);
-    const clusterX = 50 + side * 18;
-    const clusterY = 29 + lane * 23;
+    const clusterPoint = radialPoint(index, Math.max(clusters.length, 1), 18, 16, -Math.PI / 2.2);
+    const clusterX = clusterPoint.x;
+    const clusterY = clusterPoint.y;
     const clusterId = `cluster:${cluster.id}`;
     nodes.push({
       id: clusterId,
@@ -622,27 +655,28 @@ function buildGraph() {
       body: cluster.posts.map((post) => post.hashtags.slice(0, 2).map(cleanTag).join(" · ")).filter(Boolean).slice(0, 2).join(" / "),
       x: clusterX,
       y: clusterY,
-      z: 20 - lane * 18,
-      w: 180,
-      h: 96,
+      z: 20 - index * 8,
+      w: 134,
+      h: 54,
       cluster,
     });
     edges.push({ id: `root-${clusterId}`, from: "root", to: clusterId, tone: "primary" });
 
     cluster.posts.slice(0, 4).forEach((post, postIndex) => {
       const postId = `post:${post.id}`;
-      const offset = postIndex - (cluster.posts.length - 1) / 2;
+      const postPoint = radialPoint(postNodeIndex, Math.max(visiblePostTotal, 1), 31, 28, -Math.PI / 1.65);
+      postNodeIndex += 1;
       nodes.push({
         id: postId,
         kind: "post",
         label: `@${post.handle}`,
         sub: post.query || post.topicName || "SNS post",
         body: truncate(post.caption, 132),
-        x: clusterX + side * 14,
-        y: clusterY + offset * 13 + 3,
+        x: postPoint.x,
+        y: postPoint.y,
         z: -40 - postIndex * 10,
-        w: 240,
-        h: 124,
+        w: 156,
+        h: 60,
         post,
       });
       edges.push({ id: `${clusterId}-${postId}`, from: clusterId, to: postId, tone: "muted" });
@@ -651,17 +685,18 @@ function buildGraph() {
 
   keywords.forEach((keyword, index) => {
     const id = `keyword:${keyword.query}`;
+    const point = radialPoint(index, Math.max(keywords.length, 1), 39, 36, -Math.PI / 2);
     nodes.push({
       id,
       kind: "keyword",
       label: keyword.kind === "hashtag" ? `#${keyword.label}` : keyword.label,
       sub: `${keyword.postIds.length} related posts`,
       body: "이 키워드로 다시 검색해 다음 가지를 확장할 수 있습니다.",
-      x: 18 + index * 12,
-      y: 84 + (index % 2) * 7,
+      x: point.x,
+      y: point.y,
       z: -90,
-      w: 132,
-      h: 64,
+      w: 118,
+      h: 48,
       keyword,
     });
     edges.push({ id: `root-${id}`, from: "root", to: id, tone: "keyword" });
@@ -691,8 +726,8 @@ function buildGraph() {
         x: 50,
         y: 24 + index * 12,
         z: 18 - index * 6,
-        w: 178,
-        h: 82,
+        w: 142,
+        h: 54,
         branch,
       });
       edges.push({ id: `${selectedPostNode.id}-${branchId}`, from: selectedPostNode.id, to: branchId, tone: "branch" });
@@ -709,8 +744,8 @@ function buildGraph() {
     if (rootNode) {
       rootNode.x = 50;
       rootNode.y = 83;
-      rootNode.w = 220;
-      rootNode.h = 112;
+      rootNode.w = 170;
+      rootNode.h = 70;
     }
     if (cityNode) {
       cityNode.x = 20;
@@ -718,16 +753,16 @@ function buildGraph() {
     }
     selectedPostNode.x = 24;
     selectedPostNode.y = 44;
-    selectedPostNode.w = 260;
-    selectedPostNode.h = 142;
+    selectedPostNode.w = 180;
+    selectedPostNode.h = 76;
     selectedPostNode.z = 80;
 
     const relatedPostNodes = nodes.filter((node) => node.kind === "post" && branchRelatedIds.has(String(node.post?.id)) && node.id !== selectedPostNode.id);
     relatedPostNodes.slice(0, 4).forEach((node, index) => {
       node.x = 78;
       node.y = 28 + index * 16;
-      node.w = 252;
-      node.h = 122;
+      node.w = 172;
+      node.h = 68;
       node.z = 46 - index * 6;
     });
 
@@ -1029,22 +1064,38 @@ function renderGraph(graph) {
     button.style.left = `${node.x}%`;
     button.style.top = `${node.y}%`;
     button.style.width = `${node.w}px`;
-    button.style.minHeight = `${node.h}px`;
+    button.style.height = `${node.h}px`;
     button.style.transform = `translate(-50%, -50%) translate3d(0, 0, ${node.z || 0}px)`;
 
     if (node.kind === "post") {
-      const tags = node.post.hashtags.slice(0, 3).map((tag) => `<span>#${escapeHtml(cleanTag(tag))}</span>`).join("");
       button.innerHTML = `
-        <span class="card-meta"><span>${escapeHtml(node.post.platform || "instagram")}</span><span>${escapeHtml(node.post.score)}</span></span>
+        <span class="node-dot"></span>
         <span class="card-title">${escapeHtml(node.label)}</span>
-        <span class="card-body">${escapeHtml(node.body)}</span>
-        <span class="card-tags">${tags}</span>
+        <span class="card-sub">${escapeHtml(node.post.platform || "post")} · ${escapeHtml(node.post.score)}</span>
+      `;
+    } else if (node.kind === "keyword") {
+      button.innerHTML = `
+        <span class="node-dot"></span>
+        <span class="card-title">${escapeHtml(node.label)}</span>
+        <span class="card-sub">${escapeHtml(node.sub || "related posts")}</span>
+      `;
+    } else if (node.kind === "cluster") {
+      button.innerHTML = `
+        <span class="node-dot"></span>
+        <span class="card-title">${escapeHtml(node.label)}</span>
+        ${node.sub ? `<span class="card-sub">${escapeHtml(node.sub)}</span>` : ""}
+      `;
+    } else if (node.kind === "branch") {
+      button.innerHTML = `
+        <span class="node-dot"></span>
+        <span class="card-title">${escapeHtml(node.label)}</span>
+        ${node.sub ? `<span class="card-sub">${escapeHtml(node.sub)}</span>` : ""}
       `;
     } else {
       button.innerHTML = `
+        <span class="node-dot"></span>
         <span class="card-title">${escapeHtml(node.label)}</span>
         ${node.sub ? `<span class="card-sub">${escapeHtml(node.sub)}</span>` : ""}
-        ${node.body ? `<span class="card-body">${escapeHtml(node.body)}</span>` : ""}
       `;
     }
 

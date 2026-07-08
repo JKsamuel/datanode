@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseArgs } from './lib/args.js';
+import { assessPostRelevance } from './lib/content-filter.js';
 import { mapLimit } from './lib/concurrency.js';
 import { createCrawlRun, completeCrawlRun, fetchCities, fetchTopics } from './lib/db.js';
 import { loadEnv } from './lib/env.js';
@@ -9,8 +10,40 @@ import { SupabaseRestClient, assertWritableSupabase } from './lib/supabase-rest.
 
 loadEnv();
 
+const defaultCitySignalSeeds = [
+  'food',
+  'rent-real-estate',
+  'jobs',
+  'events',
+  'immigration',
+  'finance',
+  'education',
+  'transportation',
+  'healthcare',
+  'travel-outdoors',
+];
+
 function compactText(text, limit = 900) {
   return (text ?? '').replace(/\s+/g, ' ').trim().slice(0, limit);
+}
+
+function cutoffDateFromMonths(months) {
+  if (!months || months <= 0) return null;
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - months);
+  return cutoff;
+}
+
+function dateRangeMeta(sourcePublishedAt, cutoffDate, recentMonths) {
+  if (!cutoffDate) return null;
+  const publishedAt = sourcePublishedAt ? new Date(sourcePublishedAt) : null;
+  const publishedAtKnown = Boolean(publishedAt && Number.isFinite(publishedAt.getTime()));
+  return {
+    recent_months: recentMonths,
+    cutoff: cutoffDate.toISOString(),
+    published_at_known: publishedAtKnown,
+    within_range: publishedAtKnown ? publishedAt >= cutoffDate : true,
+  };
 }
 
 async function createBrowser({ headed, storageState }) {
@@ -27,21 +60,71 @@ async function createBrowser({ headed, storageState }) {
 
 async function extractOpenThreadSignal(page, fallbackUrl) {
   return page.evaluate((fallback) => {
+    const noiseLines = new Set([
+      'Home',
+      'New thread',
+      'Search',
+      'Messages',
+      'Activity',
+      'Profile',
+      'Insights',
+      'Saved',
+      'Feeds',
+      'Edit',
+      'For you',
+      'Following',
+      'Ghost posts',
+      'More',
+      'Threads',
+      'Replies',
+      'Media',
+      'Reposts',
+      'Follow',
+      'Message',
+      'Learn more',
+      'Translate',
+      'Top',
+      'View activity',
+      "Sorry, we're having trouble playing this video.",
+    ]);
+    const lines = (document.body.innerText ?? '')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
     const canonical =
       document.querySelector('meta[property="og:url"]')?.getAttribute('content') ??
       document.querySelector('link[rel="canonical"]')?.getAttribute('href') ??
       location.href ??
       fallback;
     const article = document.querySelector('article') ?? document.querySelector('[role="article"]');
-    const text = article?.innerText ?? document.body.innerText ?? '';
+    const canonicalHandle = (() => {
+      try {
+        return new URL(canonical, location.origin).pathname.match(/^\/@([^/?#]+)/)?.[1] ?? null;
+      } catch {
+        return null;
+      }
+    })();
     const authorHref = Array.from(document.querySelectorAll('a[href^="/@"], a[href*="threads.com/@"], a[href*="threads.net/@"]'))
       .map((anchor) => anchor.getAttribute('href') ?? '')
       .find((href) => /\/@[^/?#]+/.test(href));
-    const authorHandle = authorHref?.match(/@([^/?#]+)/)?.[1] ?? null;
+    const authorHandle = canonicalHandle ?? authorHref?.match(/@([^/?#]+)/)?.[1] ?? location.pathname.match(/^\/@([^/?#]+)/)?.[1] ?? null;
+    const firstTime = document.querySelector('time[datetime]');
     const publishedAt =
-      document.querySelector('time[datetime]')?.getAttribute('datetime') ??
+      firstTime?.getAttribute('datetime') ??
       document.querySelector('meta[property="article:published_time"]')?.getAttribute('content') ??
       null;
+    const timeText = firstTime?.textContent?.trim();
+    const timeIndex = timeText ? lines.findIndex((line) => line === timeText) : -1;
+    const fallbackLines = timeIndex >= 0 ? lines.slice(timeIndex + 1) : lines;
+    const textFromLines = [];
+    for (const line of fallbackLines) {
+      if (line === authorHandle || noiseLines.has(line)) break;
+      if (/^Reply to\b/i.test(line)) break;
+      if (/^View activity\b/i.test(line)) break;
+      if (noiseLines.has(line)) continue;
+      textFromLines.push(line);
+    }
+    const text = textFromLines.join('\n') || article?.innerText || document.body.innerText || '';
     const mediaUrl =
       document.querySelector('article img[src], [role="article"] img[src]')?.getAttribute('src') ??
       document.querySelector('meta[property="og:image"]')?.getAttribute('content') ??
@@ -67,6 +150,14 @@ async function returnToSearch(page, searchUrl) {
 async function collectSignalsFromThreadsSearch(page, url, limit, timeoutMs) {
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
   await page.waitForTimeout(1800);
+  const loginGate = await page.evaluate(() => {
+    const text = document.body.innerText ?? '';
+    const postLinks = document.querySelectorAll('a[href*="/post/"]').length;
+    return postLinks === 0 && /Log in or sign up for Threads|Continue with Instagram|Log in with username/.test(text);
+  });
+  if (loginGate) {
+    throw new Error('Threads login required. Create a storage state with `npm run agent:login:threads`, then rerun the collector.');
+  }
   const signals = [];
   const seen = new Set();
 
@@ -114,6 +205,7 @@ function dryRunSignals(query, city, topic, limit) {
     mediaUrl: null,
     hashtags: [city.slug, topic.slug, 'threads', 'dryrun'],
     extractionMode: 'dry-run',
+    sourceQuery: query.query,
   }));
 }
 
@@ -131,26 +223,45 @@ async function insertQuery(client, { runId, city, topic, query, resultCount, dry
   return rows[0];
 }
 
-async function upsertPosts(client, { city, topic, crawlQueryId, signals, dryRun }) {
-  const rows = signals.map((signal) => ({
-    platform: 'threads',
-    source_url: signal.sourceUrl,
-    canonical_url: signal.sourceUrl,
-    city_id: city.id,
-    topic_id: topic.id,
-    crawl_query_id: dryRun ? null : crawlQueryId,
-    author_handle: signal.authorHandle,
-    caption: signal.caption,
-    source_published_at: signal.sourcePublishedAt,
-    status: 'candidate',
-    score: 0.45,
-    metadata: {
-      collector: 'threads-city-agent',
-      extraction_mode: signal.extractionMode,
-      hashtags: signal.hashtags,
-      media_url: signal.mediaUrl,
-    },
-  }));
+async function upsertPosts(client, { city, topic, crawlQueryId, signals, dryRun, cutoffDate, recentMonths }) {
+  const rows = signals
+    .map((signal) => {
+      const rangeMeta = dateRangeMeta(signal.sourcePublishedAt, cutoffDate, recentMonths);
+      if (rangeMeta && !rangeMeta.within_range) return null;
+      const relevance = assessPostRelevance({
+        text: [signal.caption, ...(signal.hashtags ?? []).map((tag) => `#${tag}`)].join(' '),
+        city,
+        topic,
+        sourceQuery: signal.sourceQuery,
+      });
+      if (!relevance.accepted) return null;
+      return {
+        platform: 'threads',
+        source_url: signal.sourceUrl,
+        canonical_url: signal.sourceUrl,
+        city_id: city.id,
+        topic_id: topic.id,
+        crawl_query_id: dryRun ? null : crawlQueryId,
+        author_handle: signal.authorHandle,
+        caption: signal.caption,
+        language: relevance.language,
+        source_published_at: signal.sourcePublishedAt,
+        status: relevance.status,
+        score: relevance.score,
+        metadata: {
+          collector: 'threads-city-agent',
+          collection_mode: 'city_keyword_graph',
+          seed_topic: topic.slug,
+          extraction_mode: signal.extractionMode,
+          source_query: signal.sourceQuery,
+          hashtags: signal.hashtags,
+          media_url: signal.mediaUrl,
+          date_range: rangeMeta,
+          relevance_filter: relevance,
+        },
+      };
+    })
+    .filter(Boolean);
 
   if (dryRun || rows.length === 0) return rows;
   return client.upsert('social_posts', rows, { onConflict: 'source_url' });
@@ -160,11 +271,13 @@ export async function runThreadsCollector(options = {}) {
   const args = options.args ?? parseArgs();
   const dryRun = options.dryRun ?? args.flag('dry-run');
   const citySlugs = options.cities ?? args.list('cities', args.value('city') ? [args.value('city')] : ['toronto']);
-  const topicSlugs = options.topics ?? args.list('topics', args.value('topic') ? [args.value('topic')] : ['food']);
+  const topicSlugs = options.topics ?? args.list('topics', args.value('topic') ? [args.value('topic')] : defaultCitySignalSeeds);
   const queryLimit = options.queryLimit ?? args.int('queries', 8);
   const perQueryLimit = options.perQueryLimit ?? args.int('per-query', 6);
   const timeoutMs = options.timeoutMs ?? args.int('timeout-ms', 20000);
   const concurrency = options.concurrency ?? args.int('concurrency', 2);
+  const recentMonths = options.recentMonths ?? (args.value('recent-months') ? args.int('recent-months', null) : null);
+  const cutoffDate = cutoffDateFromMonths(recentMonths);
   const headed = options.headed ?? args.flag('headed');
   const storageState = resolve(args.value('storage-state', process.env.THREADS_PLAYWRIGHT_STORAGE_STATE ?? 'agents/.threads-storage-state.json'));
   if (!dryRun) assertWritableSupabase();
@@ -183,7 +296,7 @@ export async function runThreadsCollector(options = {}) {
         : await createCrawlRun(client, {
             cityId: city.id,
             topicId: topic.id,
-            metadata: { platform: 'threads', city: city.slug, topic: topic.slug, dryRun },
+            metadata: { collection_mode: 'city_keyword_graph', platform: 'threads', city: city.slug, seed_topic: topic.slug, recent_months: recentMonths, cutoff: cutoffDate?.toISOString() ?? null, dryRun },
           });
 
       let discovered = 0;
@@ -197,25 +310,29 @@ export async function runThreadsCollector(options = {}) {
           } finally {
             await page?.close();
           }
-          const uniqueSignals = Array.from(new Map(signals.map((signal) => [signal.sourceUrl, signal])).values()).slice(0, perQueryLimit);
+          const annotatedSignals = signals.map((signal) => ({
+            ...signal,
+            sourceQuery: query.query,
+          }));
+          const uniqueSignals = Array.from(new Map(annotatedSignals.map((signal) => [signal.sourceUrl, signal])).values()).slice(0, perQueryLimit);
           discovered += uniqueSignals.length;
           const crawlQuery = await insertQuery(client, { runId: run.id, city, topic, query, resultCount: uniqueSignals.length, dryRun });
-          const postRows = await upsertPosts(client, { city, topic, crawlQueryId: crawlQuery.id, signals: uniqueSignals, dryRun });
+          const postRows = await upsertPosts(client, { city, topic, crawlQueryId: crawlQuery.id, signals: uniqueSignals, dryRun, cutoffDate, recentMonths });
           inserted += postRows.length;
         }
         if (!dryRun) {
           await completeCrawlRun(client, run.id, {
             status: 'completed',
-            metadata: { platform: 'threads', city: city.slug, topic: topic.slug, discovered, inserted },
+            metadata: { collection_mode: 'city_keyword_graph', platform: 'threads', city: city.slug, seed_topic: topic.slug, recent_months: recentMonths, cutoff: cutoffDate?.toISOString() ?? null, discovered, inserted },
           });
         }
-        summary.push({ platform: 'threads', city: city.slug, topic: topic.slug, queries: queries.length, discovered, inserted, dryRun });
+        summary.push({ platform: 'threads', collectionMode: 'city_keyword_graph', city: city.slug, seedTopic: topic.slug, recentMonths, queries: queries.length, discovered, inserted, dryRun });
       } catch (error) {
         if (!dryRun) {
           await completeCrawlRun(client, run.id, {
             status: 'failed',
             errorMessage: error instanceof Error ? error.message : String(error),
-            metadata: { platform: 'threads', city: city.slug, topic: topic.slug, discovered, inserted },
+            metadata: { collection_mode: 'city_keyword_graph', platform: 'threads', city: city.slug, seed_topic: topic.slug, recent_months: recentMonths, cutoff: cutoffDate?.toISOString() ?? null, discovered, inserted },
           });
         }
         throw error;
@@ -225,7 +342,7 @@ export async function runThreadsCollector(options = {}) {
     await browserBundle?.browser.close();
   }
 
-  return summary.sort((a, b) => `${a.city}:${a.topic}`.localeCompare(`${b.city}:${b.topic}`));
+  return summary.sort((a, b) => `${a.city}:${a.seedTopic}`.localeCompare(`${b.city}:${b.seedTopic}`));
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

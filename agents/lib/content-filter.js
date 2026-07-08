@@ -63,10 +63,20 @@ const FOREIGN_EXCLUSION_PATTERNS = [
   /(발리|우붓|짱구맛집|인도네시아)/,
   /\b(boston|massachusetts|harvard|mit)\b/i,
   /(보스턴|매사추세츠)/,
+  /\b(united states|usa|u\.s\.|america|american|pennsylvania|lancaster|new york|nyc|california|texas|florida|singapore)\b/i,
+  /(미국|펜실베이니아|랭커스터|뉴욕|캘리포니아|텍사스|플로리다|싱가포르)/,
   /\b(new zealand|nz|waikato|auckland|wellington)\b/i,
   /(뉴질랜드|와이카토|오클랜드|웰링턴)/,
   /\blondon\b(?!\s*,?\s*(on|ontario|canada)\b)/i,
   /런던(?!\s*(온타리오|캐나다))/,
+];
+
+const NON_CITY_HAMILTON_PATTERNS = [
+  /\bhamilton\s*watch\b/i,
+  /\bhamiltonwatch\b/i,
+  /\bkhaki\s*field\b/i,
+  /\bwatchmaker\b/i,
+  /(해밀턴\s*카키|카키\s*필드|워치메이커|시계)/,
 ];
 
 const KOREA_ONLY_PATTERNS = [
@@ -102,6 +112,7 @@ export function assessPostRelevance({ text, city, topic, sourceProfileHandle, so
   const cityTerms = [city?.slug, city?.name_ko, city?.name_en, ...(city?.aliases ?? [])].filter(Boolean);
   const topicTerms = [topic?.label_ko, topic?.label_en, ...(topic?.keywords ?? []), ...(topic?.seed_hashtags ?? [])].filter(Boolean);
   const queryTerms = [sourceQuery, sourceProfileHandle].filter(Boolean);
+  const sourceProfileText = String(sourceProfileHandle ?? '').toLowerCase();
   const textForSignals = lower;
 
   if (compact.length < 8) {
@@ -110,21 +121,25 @@ export function assessPostRelevance({ text, city, topic, sourceProfileHandle, so
 
   const hasForeignExclusion = FOREIGN_EXCLUSION_PATTERNS.some((pattern) => pattern.test(compact));
   if (hasForeignExclusion) reasons.push('foreign_geo_exclusion');
+  const hasNonCityHamiltonSignal = city?.slug === 'hamilton' && NON_CITY_HAMILTON_PATTERNS.some((pattern) => pattern.test(compact));
+  if (hasNonCityHamiltonSignal) reasons.push('non_city_hamilton_brand');
 
   const canadaMatches = CANADA_TERMS.filter((term) => includesTerm(textForSignals, term));
   const cityMatches = cityTerms.filter((term) => includesTerm(textForSignals, String(term)));
   const topicMatches = topicTerms.filter((term) => includesTerm(textForSignals, String(term).replace(/^#/, '')));
-  const hasTrustedLocalSource = Boolean(sourceProfileHandle);
+  const trustedSourceCityMatches = cityTerms.filter((term) => includesTerm(sourceProfileText, String(term)));
+  const trustedSourceCanadaMatches = CANADA_TERMS.filter((term) => includesTerm(sourceProfileText, String(term)));
+  const hasTrustedLocalSource = trustedSourceCityMatches.length > 0 || trustedSourceCanadaMatches.length > 0;
   const isCountrySegment = city?.slug === 'canada';
-  const hasCanadaContext = canadaMatches.length > 0 || hasTrustedLocalSource;
-  const hasCityContext = isCountrySegment || cityMatches.length > 0 || hasTrustedLocalSource;
+  const hasCanadaContext = canadaMatches.length > 0 || trustedSourceCanadaMatches.length > 0 || trustedSourceCityMatches.length > 0;
+  const hasCityContext = isCountrySegment || cityMatches.length > 0 || trustedSourceCityMatches.length > 0;
   const hasKoreaOnlySignal = KOREA_ONLY_PATTERNS.some((pattern) => pattern.test(compact)) && canadaMatches.length === 0 && cityMatches.length === 0;
 
   if (!hasCanadaContext) reasons.push('missing_canada_context');
   if (!hasCityContext) reasons.push('missing_city_context');
   if (hasKoreaOnlySignal) reasons.push('korea_only_context');
 
-  const rejectedReasons = new Set(['foreign_geo_exclusion', 'missing_canada_context', 'missing_city_context', 'korea_only_context']);
+  const rejectedReasons = new Set(['foreign_geo_exclusion', 'non_city_hamilton_brand', 'missing_canada_context', 'missing_city_context', 'korea_only_context']);
   const accepted = !reasons.some((reason) => rejectedReasons.has(reason));
   const language = detectLanguage(compact);
   const score = Math.min(
@@ -147,6 +162,8 @@ export function assessPostRelevance({ text, city, topic, sourceProfileHandle, so
       canada_matches: canadaMatches,
       city_matches: cityMatches,
       topic_matches: topicMatches,
+      trusted_source_city_matches: trustedSourceCityMatches,
+      trusted_source_canada_matches: trustedSourceCanadaMatches,
       source_terms: queryTerms,
     },
   };

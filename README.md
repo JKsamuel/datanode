@@ -1,8 +1,345 @@
-# DataNode Social Graph
+# DataNode
 
-Standalone prototype for exploring Instagram/social curation data as an entity graph. This project is intentionally isolated from the Revue project.
+DataNode is an entity-graph intelligence platform for social media signals.
 
-## App
+It is not a simple social search UI, crawler, or city directory. The product goal is to let a user define a search scope, collect social posts within that scope, extract entities and repeated signals, and visualize the result as an expandable graph.
+
+The first prototype uses Canadian cities such as Toronto and Hamilton, but the long-term product is not limited to cities. A city is just one useful search scope.
+
+## Product Direction
+
+The intended user flow is:
+
+1. A user enters a keyword, city, business category, issue, or phrase.
+2. The user selects a date range, such as the last 30 days, 3 months, 6 months, or a custom period.
+3. DataNode collects relevant social posts from sources such as Instagram and Threads.
+4. The system extracts entities from those posts:
+   - keywords
+   - hashtags
+   - authors
+   - businesses
+   - places
+   - neighborhoods
+   - repeated questions
+   - recurring complaints
+   - event names
+   - campaign or advertising signals
+5. Extracted entities become graph nodes.
+6. Relationships become graph edges.
+7. Newly discovered entities can become follow-up search seeds.
+8. The user explores a visual entity graph instead of scrolling through platform-ranked search results.
+
+The core experience should feel like social deep research rendered as an entity graph.
+
+## Core Philosophy
+
+Social platforms show results through their own ranking algorithms. DataNode should instead help users infer what is happening inside a search scope by building a relationship map from collected evidence.
+
+The system should answer questions like:
+
+- What are people in this city talking about?
+- What topics are repeatedly appearing?
+- Which businesses are advertising or appearing often?
+- Which places, neighborhoods, or venues are becoming visible?
+- What complaints or questions keep coming up?
+- Which keywords lead to new clusters of posts?
+- What changed during a specific time period?
+- Which accounts or businesses are central in the graph?
+
+The product should not force users to start with fixed categories such as food, rent, immigration, or jobs. Those categories can remain internal collection seeds, but the surface experience should be:
+
+```text
+query + date range -> social collection -> entity extraction -> relationship graph -> expandable exploration
+```
+
+## Visual Direction
+
+The frontend should look and behave like an intelligence analysis console, not a card dashboard.
+
+The graph should prioritize:
+
+- small entity nodes
+- thin relationship lines
+- a central scope or query node
+- surrounding keyword, post, author, business, and place nodes
+- dense but readable network structure
+- right-side inspector panels for evidence
+- graph-first exploration
+
+Avoid making the main graph look like:
+
+- a marketing landing page
+- a card grid
+- a generic dashboard
+- a mindmap made of large text boxes
+- a category browsing UI
+
+The graph canvas should be the primary object. Post text, captions, URLs, and evidence should appear in side panels after selecting a node.
+
+## Business Model
+
+DataNode can become a social intelligence product for people who need to understand local or niche market behavior without manually scrolling through social platforms.
+
+Potential customer groups:
+
+- local business owners
+- marketers and agencies
+- real estate operators
+- event organizers
+- community media operators
+- local news or newsletter teams
+- franchise operators
+- immigration, education, and settlement services
+- city-focused creators
+- researchers tracking public sentiment
+
+Potential use cases:
+
+- Discover what people in Hamilton have discussed in the last 3 months.
+- Identify which restaurants or cafes are heavily promoted in Toronto.
+- Track emerging rental complaints in Waterloo.
+- Find recurring questions among Korean-speaking newcomers in Canada.
+- Detect event, popup, and local business activity in a region.
+- Compare interest clusters across cities.
+- Generate leads for businesses that are actively advertising or appearing in social conversations.
+
+Possible pricing:
+
+- Free: limited searches, limited history, mock or small graph size.
+- Pro: saved searches, date range analysis, export, larger graphs.
+- Agency: multiple cities/clients, scheduled monitoring, reporting.
+- Enterprise/API: custom data pipelines, private dashboards, data export.
+
+## Data Model Direction
+
+The database should evolve toward search sessions and entity graphs.
+
+Important concepts:
+
+- `search_sessions`: user-defined query, date range, platforms, status, and graph scope.
+- `crawl_queries`: actual platform queries generated from the search session.
+- `social_posts`: canonical collected posts, reels, and threads.
+- `entities`: extracted keywords, hashtags, businesses, places, authors, and topics.
+- `entity_edges` or expanded `graph_edges`: relationships between posts and entities.
+- `expansion_queue`: newly discovered entities that should become follow-up searches.
+- `graph_snapshots`: cached graph state for a search session.
+
+The current schema already has `social_posts`, `hashtags`, `post_hashtags`, and `graph_edges`. These should be treated as the foundation, not the final model.
+
+## Agent Direction
+
+The agents should not remain simple `city x topic` crawlers.
+
+The target agent loop is:
+
+1. Start with a user search scope:
+   - query
+   - date range
+   - platform list
+   - optional city or region
+2. Generate initial seed queries.
+3. Collect posts through platform-specific collectors.
+4. Enrich posts:
+   - clean text
+   - detect language
+   - extract hashtags
+   - extract keywords
+   - extract business/place/account signals
+   - extract publish timestamps when available
+5. Build graph edges:
+   - search -> post
+   - post -> keyword
+   - post -> hashtag
+   - post -> author
+   - post -> business
+   - post -> place
+   - post -> similar post
+   - keyword -> related keyword
+6. Rank expansion candidates.
+7. Push high-value entities into an expansion queue.
+8. Repeat within a controlled budget.
+
+The agent system should work like social deep research:
+
+```text
+initial query -> collect -> extract -> graph -> find promising entities -> collect again -> expand graph
+```
+
+## Current Agent Notes
+
+Current collectors still use topic seeds internally. That is acceptable only as a temporary mechanism for broad coverage. The product surface should not expose fixed Signal Class filters as the main experience.
+
+Collectors should increasingly become:
+
+- scope-aware
+- date-range-aware
+- keyword-expansion-aware
+- entity-graph-aware
+
+Instagram rule:
+
+Do not navigate directly to `/p/...` or `/reel/...` URLs as the primary collection path. Instagram often blocks direct post navigation. Use:
+
+1. Search grid.
+2. Click visible card.
+3. Extract signal from opened state.
+4. Close or go back.
+5. Continue.
+
+Threads rule:
+
+Threads is useful for concerns, questions, recommendations, and trend signals. It should be collected through search result cards and treated as text-first.
+
+## Date Range Requirement
+
+Date range is a core product requirement.
+
+For early collectors, publish dates may be missing or unreliable. Still, the system should track:
+
+- `source_published_at` when available
+- `discovered_at`
+- collection run timestamp
+- search session date range
+
+When exact publish dates are unavailable, the UI and reports must clearly distinguish:
+
+- posts confirmed within range
+- posts discovered within range
+- posts with unknown publish date
+
+## Frontend Direction
+
+The frontend should become:
+
+```text
+query input + date range + platform selectors
+-> run analysis
+-> entity graph
+-> node inspector
+-> expansion controls
+```
+
+Graph nodes should represent:
+
+- search/session
+- post
+- keyword
+- hashtag
+- author
+- business
+- place
+- date cluster
+- platform
+
+The main canvas should not show long captions inside nodes. Nodes should remain compact. Captions and evidence belong in the inspector.
+
+## Development Plan
+
+### Phase 1: Hamilton Data
+
+Goal: collect enough Hamilton data to make the graph meaningful.
+
+Tasks:
+
+- Add Hamilton to all local fallback city lists.
+- Run collectors for Hamilton using broad city-level seed topics.
+- Capture posts from the last 3 months when publish dates are available.
+- Enrich candidates and approve relevant posts.
+- Build graph edges.
+- Verify Hamilton appears as a useful entity graph.
+
+### Phase 2: Search Session Model
+
+Goal: stop treating city/topic as the only unit of work.
+
+Tasks:
+
+- Add `search_sessions`.
+- Store user query and date range.
+- Link crawl queries and posts to search sessions.
+- Support arbitrary keyword-based sessions.
+
+### Phase 3: Entity Extraction
+
+Goal: move beyond hashtags.
+
+Tasks:
+
+- Extract businesses and account names.
+- Extract places and neighborhoods.
+- Extract repeated phrases and concerns.
+- Add confidence scores and evidence snippets.
+
+### Phase 4: Expansion Queue
+
+Goal: make the graph grow by following discovered entities.
+
+Tasks:
+
+- Rank high-value keywords/entities.
+- Generate follow-up queries.
+- Track expansion depth.
+- Prevent runaway duplicate searches.
+
+### Phase 5: Intelligence Views
+
+Goal: help users infer meaning from the graph.
+
+Tasks:
+
+- Top entities by frequency.
+- Fast-rising keywords.
+- Most active businesses/accounts.
+- Repeated questions or complaints.
+- Date-based trend view.
+- Exportable report.
+
+## Working Prompt For Future Agents
+
+Use this prompt when continuing the project:
+
+```text
+You are working on DataNode, an entity-graph social intelligence platform.
+
+Do not treat this as a simple social search app, city directory, or card dashboard.
+
+The product goal is:
+Given a user-defined query and date range, collect social media posts, extract entities, build relationships, and visualize the result as an expandable entity graph.
+
+The first prototype uses Canadian cities such as Hamilton and Toronto, but the long-term model must support arbitrary user queries and periods.
+
+Core philosophy:
+- The graph should reveal what people are talking about, what businesses are active, what places or issues are recurring, and which entities lead to further discovery.
+- Fixed categories such as food, rent, jobs, or immigration may be used internally as seed topics, but they should not dominate the user-facing product.
+- The UI should feel like a Palantir-style intelligence graph: small nodes, thin edges, dense relationships, and evidence in side panels.
+- The main canvas should not be a grid of cards.
+
+Agent direction:
+- Collect broadly from the user's scope.
+- Extract keywords, hashtags, authors, businesses, places, and repeated concerns.
+- Store graph edges.
+- Use discovered entities as follow-up search seeds.
+- Respect date ranges and clearly label unknown publish dates.
+
+When making changes, prioritize:
+1. Data collection quality.
+2. Entity extraction.
+3. Graph edge correctness.
+4. Search-session and date-range support.
+5. Dense graph visualization.
+6. Evidence inspection and explainability.
+
+Avoid:
+- hard-coding the product around one city
+- over-relying on topic filters
+- making the graph look like large cards
+- changing unrelated Revue project files
+- printing or exposing service role keys
+```
+
+## Local Development
+
+Run the app:
 
 ```bash
 npm run dev
@@ -14,115 +351,22 @@ Open:
 http://localhost:4173
 ```
 
-The browser app reads approved posts and graph edges from the DataNode Supabase project, then falls back to local mock data if the API is unavailable.
-
-## Agent Structure
-
-The collection pipeline is split into small agents so city/topic work can run in parallel:
-
-1. `instagram-city-agent`
-   - Takes city and topic slugs.
-   - Builds Instagram keyword, hashtag, and curated profile searches.
-   - Opens the search grid and clicks post/reel cards in-place.
-   - Extracts post signals from the opened card state.
-   - Writes candidate `social_posts` and `crawl_queries`.
-   - Uses Korean-leaning Canada/local seed profiles from `agents/lib/instagram.js` when a profile matches the active city and topic.
-
-2. `threads-city-agent`
-   - Takes city and topic slugs.
-   - Builds Threads keyword searches around local questions, concerns, reviews, and recommendations.
-   - Opens Threads search results and clicks visible post cards.
-   - Extracts text, author, URL, timestamp, tags, and media hints.
-   - Writes candidate `social_posts` with `platform = 'threads'`.
-
-3. `enrichment-agent`
-   - Visits candidate or approved posts.
-   - Extracts captions, publish timestamps, and hashtags.
-   - Promotes only Canada-relevant candidates to approved posts after enrichment.
-   - Rejects posts with foreign-only geography such as UK London or Australia, Korea-only lifestyle context, or missing Canada/city context.
-   - Live direct post navigation is blocked by default; use the grid-click collector path for Instagram.
-
-4. `graph-builder-agent`
-   - Reads approved posts and hashtags.
-   - Rebuilds post, author, city, topic, and hashtag edges.
-
-5. `run-city-agents`
-   - Orchestrates multiple city/topic collector jobs with a concurrency limit.
-   - Runs the graph builder after collection.
-
-Scheduling is intentionally left out for now. Later, this can be triggered by cron, Supabase Edge Functions, GitHub Actions, or a hosted worker.
-
-## Commands
-
-Read-only smoke test:
+Run graph builder:
 
 ```bash
-npm run agent:smoke
+npm run agent:graph
 ```
 
-Run one dry collector segment:
+Dry-run collectors:
 
 ```bash
-npm run agent:collector -- --dry-run --city=toronto --topic=food
+npm run agent:run -- --dry-run --platforms=instagram,threads --cities=hamilton --queries=3 --per-query=3
 ```
 
-Run one dry Threads collector segment:
+Run Hamilton collection when credentials and browser session are ready:
 
 ```bash
-npm run agent:threads -- --dry-run --city=toronto --topic=rent-real-estate
+npm run agent:run -- --platforms=instagram,threads --cities=hamilton --queries=8 --per-query=6
 ```
 
-Run a parallel dry collection batch:
-
-```bash
-npm run agent:run -- --dry-run --cities=toronto,vancouver --topics=food,rent-real-estate --concurrency=2
-```
-
-Run Instagram and Threads collectors together:
-
-```bash
-npm run agent:run -- --dry-run --platforms=instagram,threads --cities=toronto,vancouver --topics=food,rent-real-estate
-```
-
-Run a parallel dry Threads collection batch:
-
-```bash
-npm run agent:threads:smoke
-```
-
-Run country-wide Korean Canada sources:
-
-```bash
-npm run agent:collector -- --dry-run --city=canada --topic=travel-outdoors
-```
-
-Live Playwright collection requires dependencies and a private service-role key:
-
-```bash
-npm install
-cp .env.example .env
-```
-
-Then add `SUPABASE_SERVICE_ROLE_KEY` to `.env`. Live write commands intentionally fail without that key.
-
-## Instagram Collection Rule
-
-Do not navigate directly to `/p/...` or `/reel/...` URLs during collection. Instagram often blocks or degrades direct post navigation. The collector should:
-
-1. Open the keyword or hashtag search grid.
-2. Click a visible post/reel card.
-3. Extract URL, caption, author, timestamp, and hashtags from the opened state.
-4. Close the modal or go back to the grid.
-5. Continue with the next grid card.
-
-Permalinks are stored after extraction, but they are not the primary navigation path for collection.
-
-## Threads Collection Rule
-
-Threads collection is text-first. Use it for city/topic concerns, questions, recommendations, and trend signals. The collector should:
-
-1. Build city/topic keyword searches.
-2. Open Threads search results.
-3. Click visible post cards instead of relying only on collected hrefs.
-4. Extract URL, text, author, timestamp, tags, and media hints.
-5. Store candidates as `social_posts.platform = 'threads'`.
+Live writes require `.env` with Supabase credentials. Never commit or print service role keys.

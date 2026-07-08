@@ -4,10 +4,10 @@ import { SupabaseRestClient, assertWritableSupabase } from './lib/supabase-rest.
 
 loadEnv();
 
-async function fetchApprovedPosts(client, limit) {
+async function fetchGraphPosts(client, { limit, statuses }) {
   const params = new URLSearchParams();
   params.set('select', 'id,city_id,topic_id,author_handle,caption,status,post_hashtags(hashtags(normalized_tag))');
-  params.set('status', 'eq.approved');
+  params.set('status', `in.(${statuses.join(',')})`);
   params.set('order', 'discovered_at.desc');
   params.set('limit', String(limit));
   return client.select('social_posts', params);
@@ -28,10 +28,33 @@ const STOPWORDS = new Set([
   'toronto',
   'vancouver',
   'canada',
+  'ontario',
   'with',
   'from',
   'that',
   'this',
+  'the',
+  'and',
+  'for',
+  'to',
+  'in',
+  'you',
+  'your',
+  'are',
+  'any',
+  'anyone',
+  'have',
+  'has',
+  'had',
+  'need',
+  'some',
+  'want',
+  'get',
+  'into',
+  'real',
+  'area',
+  'today',
+  'together',
 ]);
 
 function normalizeText(text) {
@@ -177,25 +200,30 @@ export async function runGraphBuilder(options = {}) {
   const dryRun = options.dryRun ?? args.flag('dry-run');
   const limit = options.limit ?? args.int('limit', 500);
   const searchKey = options.searchKey ?? args.value('search-key', 'toronto:food');
+  const statuses = options.statuses ?? args.list('statuses', args.flag('include-candidates') ? ['approved', 'candidate'] : ['approved']);
   if (!dryRun) assertWritableSupabase();
   const client = options.client ?? new SupabaseRestClient();
   let posts = [];
   try {
-    posts = await fetchApprovedPosts(client, limit);
+    posts = await fetchGraphPosts(client, { limit, statuses });
   } catch (error) {
     if (!dryRun) throw error;
     console.warn(`[DataNode] Skipping graph-builder DB read in dry-run: ${error.message}`);
   }
   const edges = buildEdges(posts, searchKey);
 
-  if (!dryRun && edges.length > 0) {
-    await client.upsert('graph_edges', edges, {
-      onConflict: 'from_type,from_key,to_type,to_key,edge_type',
-      returning: 'minimal',
-    });
+  if (!dryRun) {
+    const deleteParams = new URLSearchParams({ id: 'not.is.null' });
+    await client.delete('graph_edges', deleteParams);
+    if (edges.length > 0) {
+      await client.upsert('graph_edges', edges, {
+        onConflict: 'from_type,from_key,to_type,to_key,edge_type',
+        returning: 'minimal',
+      });
+    }
   }
 
-  return { posts: posts.length, edges: edges.length, dryRun };
+  return { posts: posts.length, edges: edges.length, statuses, dryRun };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

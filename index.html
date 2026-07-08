@@ -3,33 +3,32 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>DataNode Signal Graph</title>
-    <link rel="stylesheet" href="./styles.css?v=city-mindmap-3" />
+    <title>DataNode Entity Graph</title>
+    <link rel="stylesheet" href="./styles.css?v=palantir-entity-6" />
   </head>
   <body>
     <header class="topbar">
-      <a class="brand" href="./">DataNode Signal</a>
+      <a class="brand" href="./">DataNode</a>
       <nav class="nav">
-        <a href="#feed">피드</a>
-        <a class="active" href="#graph">그래프</a>
+        <a href="#feed">Feed</a>
+        <a class="active" href="#graph">Entity Graph</a>
       </nav>
     </header>
 
     <main class="shell">
       <aside class="panel left">
         <section class="block intro">
-          <div class="eyebrow">Signal Graph</div>
-          <h1>SNS 포스트 지식 그래프</h1>
-          <p>도시별 소셜 포스트를 중심으로 해시태그, 작성자, 문맥 신호를 따라 확장합니다.</p>
+          <div class="eyebrow">Investigation</div>
+          <h1>City Signal Graph</h1>
           <label class="search">
             <span>⌕</span>
-            <input id="searchInput" value="토론토" aria-label="검색어" />
-            <button id="searchButton" type="button">Search</button>
+            <input id="searchInput" value="해밀턴" aria-label="검색어" />
+            <button id="searchButton" type="button">Run</button>
           </label>
         </section>
 
         <section class="block">
-          <div class="section-title">City Scope</div>
+          <div class="section-title">City Index</div>
           <div class="grid-buttons" id="cityButtons"></div>
         </section>
       </aside>
@@ -37,16 +36,16 @@
       <section class="workspace" id="graph">
         <div class="statusbar">
           <div class="status-left">
-            <span class="badge" id="queryBadge">토론토</span>
+            <span class="badge" id="queryBadge">해밀턴</span>
             <span class="badge cyan" id="nodeCount">0 nodes</span>
             <span class="badge cyan" id="edgeCount">0 links</span>
             <span class="badge green">mock data</span>
           </div>
-          <div class="hint">node selection expands adjacent signals</div>
+          <div class="hint">ENTITY RESOLUTION ONLINE</div>
         </div>
 
         <div class="graph-canvas" id="graphCanvas">
-          <div class="canvas-title"><span></span>Live entity graph</div>
+          <div class="canvas-title"><span></span>Entity Graph</div>
           <svg id="edgeLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg>
           <div id="nodeLayer"></div>
         </div>
@@ -56,7 +55,7 @@
         <section class="block">
           <div class="selected-head">
             <div>
-              <div class="section-title">Selected entity</div>
+              <div class="section-title">Entity Inspector</div>
               <h2 id="selectedTitle">Root</h2>
             </div>
             <span class="badge" id="selectedKind">root</span>
@@ -66,20 +65,20 @@
 
         <section class="block">
           <div class="selected-head">
-            <div class="section-title">Related posts</div>
+            <div class="section-title">Linked Evidence</div>
             <span class="badge cyan" id="relatedCount">0</span>
           </div>
           <div class="related-list" id="relatedPosts"></div>
         </section>
 
         <section class="block">
-          <div class="section-title">Expansion seeds</div>
+          <div class="section-title">Expansion Terms</div>
           <div class="seed-list" id="seedList"></div>
         </section>
       </aside>
     </main>
 
-    <script src="./config.js?v=city-mindmap-3"></script>
-    <script src="./app.js?v=city-mindmap-3"></script>
+    <script src="./config.js?v=palantir-entity-6"></script>
+    <script src="./app.js?v=palantir-entity-6"></script>
   </body>
 </html>

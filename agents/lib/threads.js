@@ -26,9 +26,12 @@ export function extractThreadsTags(text) {
 }
 
 export function buildThreadsSeedQueries(city, topic, limit = 8) {
-  const cityTerms = [city.name_ko, city.name_en, ...(city.aliases ?? [])].filter(Boolean).slice(0, 4);
-  const topicTerms = [topic.label_ko, ...(topic.keywords ?? [])].filter(Boolean).slice(0, 6);
-  const intentTerms = ['고민', '질문', '후기', '추천', '정보', '이슈'];
+  const cityTerms = [city.name_en, city.slug, city.name_ko, ...(city.aliases ?? [])].filter(Boolean).slice(0, 5);
+  const topicTerms = [topic.label_en, topic.label_ko, ...(topic.keywords ?? []), ...(topic.seed_hashtags ?? [])]
+    .filter(Boolean)
+    .map((term) => String(term).replace(/^#/, ''))
+    .slice(0, 8);
+  const intentTerms = ['recommendation', 'review', 'question', '고민', '질문', '후기', '추천', '정보'];
   const queries = [];
 
   cityTerms.forEach((cityTerm) => {

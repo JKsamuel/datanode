@@ -83,4 +83,11 @@ export class SupabaseRestClient {
       headers: { Prefer: `return=${returning}` },
     });
   }
+
+  delete(table, params, { returning = 'minimal' } = {}) {
+    return this.request('DELETE', table, {
+      params,
+      headers: { Prefer: `return=${returning}` },
+    });
+  }
 }
