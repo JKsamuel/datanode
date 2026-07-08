@@ -158,6 +158,21 @@ p {
   font-weight: 750;
 }
 
+.search button {
+  border: 1px solid #46586f;
+  border-radius: 2px;
+  background: #111c28;
+  color: #9fd8f2;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.search button:hover {
+  border-color: var(--cyan);
+  color: #d7f3ff;
+}
+
 .grid-buttons {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -263,12 +278,12 @@ button {
   border-radius: 3px;
   background-color: var(--panel-2);
   background-image:
-    radial-gradient(circle at 50% 50%, rgba(91, 183, 213, 0.16), transparent 34%),
-    radial-gradient(circle at 50% 50%, transparent 0 31%, rgba(246, 200, 95, 0.12) 31.5%, transparent 32.2%),
-    radial-gradient(circle at 50% 50%, transparent 0 46%, rgba(91, 183, 213, 0.14) 46.5%, transparent 47.2%),
+    radial-gradient(circle at 50% 46%, rgba(91, 183, 213, 0.13), transparent 38%),
+    linear-gradient(120deg, rgba(246, 200, 95, 0.06), transparent 42%),
     linear-gradient(rgba(91, 183, 213, 0.07) 1px, transparent 1px),
     linear-gradient(90deg, rgba(91, 183, 213, 0.07) 1px, transparent 1px);
   background-size: 32px 32px;
+  perspective: 900px;
   touch-action: none;
 }
 
@@ -280,22 +295,8 @@ button {
   pointer-events: none;
   border-bottom: 1px solid #1a2735;
   background:
-    linear-gradient(90deg, transparent 0 49.85%, rgba(91, 183, 213, 0.15) 49.85% 50.15%, transparent 50.15%),
-    linear-gradient(transparent 0 49.85%, rgba(91, 183, 213, 0.15) 49.85% 50.15%, transparent 50.15%),
-    radial-gradient(circle at 50% 50%, transparent 0 24%, rgba(91, 183, 213, 0.08) 24.3% 24.7%, transparent 25% 37%, rgba(246, 200, 95, 0.1) 37.3% 37.7%, transparent 38%);
-}
-
-.graph-canvas::after {
-  content: "";
-  position: absolute;
-  inset: 11% 13%;
-  pointer-events: none;
-  border: 1px solid rgba(91, 183, 213, 0.2);
-  border-radius: 50%;
-  box-shadow:
-    inset 0 0 48px rgba(91, 183, 213, 0.08),
-    0 0 80px rgba(91, 183, 213, 0.06);
-  transform: rotateX(62deg);
+    linear-gradient(90deg, transparent 0 49.9%, rgba(91, 183, 213, 0.11) 49.9% 50.1%, transparent 50.1%),
+    linear-gradient(transparent 0 49.9%, rgba(91, 183, 213, 0.11) 49.9% 50.1%, transparent 50.1%);
 }
 
 .canvas-title {
@@ -336,50 +337,28 @@ button {
 }
 
 .edge {
-  transition: opacity 160ms ease, stroke-width 160ms ease;
-}
-
-.edge.surface {
   stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.edge.radial {
-  stroke-dasharray: 3 7;
-}
-
-.sphere-grid {
-  pointer-events: none;
-  stroke: rgba(91, 183, 213, 0.26);
-  stroke-width: 1;
-}
-
-.sphere-grid.latitude {
-  stroke: rgba(91, 183, 213, 0.28);
-}
-
-.sphere-grid.longitude {
-  stroke: rgba(246, 200, 95, 0.18);
+  transition: opacity 160ms ease, stroke-width 160ms ease;
 }
 
 .node {
   position: absolute;
-  left: 0;
-  top: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
+  justify-content: flex-start;
   border: 1px solid #314052;
-  border-radius: 999px;
+  border-radius: 4px;
   background: rgba(16, 24, 32, 0.9);
   color: var(--strong);
-  text-align: center;
+  padding: 12px;
+  text-align: left;
   box-shadow:
-    0 14px 34px rgba(0, 0, 0, 0.42),
+    0 18px 42px rgba(0, 0, 0, 0.34),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
   user-select: none;
-  will-change: transform, width, height, opacity;
+  transform-style: preserve-3d;
+  will-change: transform, opacity;
   transition: border-color 160ms ease, box-shadow 160ms ease, filter 160ms ease;
 }
 
@@ -406,6 +385,11 @@ button {
   color: #080b10;
 }
 
+.node.root .card-sub,
+.node.root .card-body {
+  color: rgba(8, 11, 16, 0.72);
+}
+
 .node.city {
   background: rgba(30, 58, 77, 0.82);
   color: #d7eefc;
@@ -417,59 +401,112 @@ button {
 }
 
 .node.tag {
+  justify-content: center;
+  padding: 8px 10px;
   background: rgba(22, 33, 45, 0.88);
   color: #b8c7d9;
 }
 
+.node.keyword {
+  justify-content: center;
+  border-color: rgba(91, 183, 213, 0.42);
+  background: rgba(12, 28, 39, 0.9);
+  color: #d7f3ff;
+}
+
+.node.keyword .card-sub {
+  color: #9fd8f2;
+}
+
+.node.keyword .card-body {
+  color: #a8bdd2;
+  -webkit-line-clamp: 2;
+}
+
 .node.post {
-  gap: 0;
-  overflow: hidden;
-  padding: 3px;
-  background: rgba(8, 13, 19, 0.86);
+  gap: 7px;
+  background: rgba(8, 13, 19, 0.92);
   backdrop-filter: blur(6px);
 }
 
-.node-thumb {
-  display: block;
-  width: 100%;
-  aspect-ratio: 1;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 999px;
-  background-position: center;
-  background-size: cover;
-  box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.32);
-}
-
+.card-title,
 .node-title {
-  max-width: 82%;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 950;
 }
 
-.node.post .node-title {
-  position: absolute;
-  left: 50%;
-  top: calc(100% + 4px);
-  max-width: 96px;
-  transform: translateX(-50%);
-  color: #dce6f1;
-  font-size: 9px;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9);
-}
-
+.card-sub,
 .node-sub {
-  max-width: 80%;
   margin-top: 4px;
   overflow: hidden;
+  color: var(--muted);
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 850;
-  opacity: 0.65;
   text-transform: uppercase;
+}
+
+.card-body {
+  display: -webkit-box;
+  margin-top: 4px;
+  overflow: hidden;
+  color: #b8c7d9;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.card-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--amber);
+  font-size: 10px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: auto;
+}
+
+.card-tags span {
+  border: 1px solid rgba(91, 183, 213, 0.28);
+  background: rgba(91, 183, 213, 0.08);
+  color: #9fd8f2;
+  padding: 2px 5px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.node.cluster {
+  background: rgba(17, 28, 40, 0.94);
+  border-color: rgba(91, 183, 213, 0.42);
+}
+
+.node.branch {
+  border-color: rgba(143, 231, 201, 0.52);
+  background: rgba(10, 34, 31, 0.92);
+  color: #d8fff4;
+}
+
+.node.branch .card-sub {
+  color: var(--green);
+}
+
+.node.branch .card-body {
+  color: #a9d9cc;
+  -webkit-line-clamp: 2;
 }
 
 .right h2 {
