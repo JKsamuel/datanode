@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>DataNode Entity Graph</title>
-    <link rel="stylesheet" href="./styles.css?v=palantir-entity-8" />
+    <link rel="stylesheet" href="./styles.css?v=palantir-entity-11" />
   </head>
   <body>
     <header class="topbar">
@@ -25,6 +25,35 @@
             <input id="searchInput" value="Hamilton" aria-label="Search query" />
             <button id="searchButton" type="button">Run</button>
           </label>
+          <div class="run-controls">
+            <label>
+              <span>Date Range</span>
+              <select id="dateRangeSelect" aria-label="Date range">
+                <option value="30">Last 30 days</option>
+                <option value="90" selected>Last 90 days</option>
+                <option value="180">Last 180 days</option>
+                <option value="all">All time</option>
+              </select>
+            </label>
+            <label>
+              <span>Platform</span>
+              <select id="platformSelect" aria-label="Platform">
+                <option value="all" selected>All platforms</option>
+                <option value="threads">Threads</option>
+                <option value="instagram">Instagram</option>
+              </select>
+            </label>
+          </div>
+        </section>
+
+        <section class="block">
+          <div class="section-title">Investigation Run</div>
+          <div class="run-summary" id="runSummary"></div>
+        </section>
+
+        <section class="block">
+          <div class="section-title">Recent Runs</div>
+          <div class="run-history" id="runHistory"></div>
         </section>
 
         <section class="block">
@@ -51,7 +80,8 @@
               <h2 id="feedTitle">Hamilton Signals</h2>
             </div>
             <div class="feed-controls">
-              <button class="feed-sort active" type="button" data-feed-sort="date">Date</button>
+              <button class="feed-sort active" type="button" data-feed-sort="rank">Rank</button>
+              <button class="feed-sort" type="button" data-feed-sort="date">Date</button>
               <button class="feed-sort" type="button" data-feed-sort="score">Score</button>
             </div>
           </div>
@@ -92,7 +122,7 @@
       </aside>
     </main>
 
-    <script src="./config.js?v=palantir-entity-8"></script>
-    <script src="./app.js?v=palantir-entity-8"></script>
+    <script src="./config.js?v=palantir-entity-11"></script>
+    <script src="./app.js?v=palantir-entity-11"></script>
   </body>
 </html>

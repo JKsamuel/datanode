@@ -116,11 +116,13 @@ The database should evolve toward search sessions and entity graphs.
 
 Important concepts:
 
-- `search_sessions`: user-defined query, date range, platforms, status, and graph scope.
+- `investigation_runs`: user-defined query, date range, platforms, status, and graph scope.
+- `investigation_run_posts`: ranked post evidence attached to one investigation run.
 - `crawl_queries`: actual platform queries generated from the search session.
 - `social_posts`: canonical collected posts, reels, and threads.
-- `entities`: extracted keywords, hashtags, businesses, places, authors, and topics.
-- `entity_edges` or expanded `graph_edges`: relationships between posts and entities.
+- `entities`: extracted keywords, hashtags, authors, concerns, events, businesses, places, and topics.
+- `investigation_run_entities`: ranked entity snapshots and evidence post links for each saved investigation run.
+- `entity_edges` or expanded `graph_edges`: future generalized relationships between posts and entities.
 - `expansion_queue`: newly discovered entities that should become follow-up searches.
 - `graph_snapshots`: cached graph state for a search session.
 
@@ -248,16 +250,17 @@ Tasks:
 - Build graph edges.
 - Verify Hamilton appears as a useful entity graph.
 
-### Phase 2: Search Session Model
+### Phase 2: Investigation Run Model
 
 Goal: stop treating city/topic as the only unit of work.
 
 Tasks:
 
-- Add `search_sessions`.
-- Store user query and date range.
-- Link crawl queries and posts to search sessions.
-- Support arbitrary keyword-based sessions.
+- Add `investigation_runs`.
+- Store user query, date range, platform, status, and graph counts.
+- Link ranked posts to each run through `investigation_run_posts`.
+- Support arbitrary keyword-based investigation runs.
+- Keep write access server-side; never expose the service role key in browser code.
 
 ### Phase 3: Entity Extraction
 
@@ -349,6 +352,18 @@ Open:
 
 ```text
 http://localhost:4173
+```
+
+`npm run dev` starts the local Node server. It serves the frontend and exposes `/api/investigation-runs`, which records a query/date/platform run into Supabase using the server-side service role key.
+
+The app also reads recent saved runs from `/api/investigation-runs`. Selecting a saved run loads its ranked `investigation_run_posts` snapshot and uses that evidence set for both Feed and Entity Graph views.
+
+Saved runs also include extracted `investigation_run_entities`. The current extractor is rule-based and captures authors, repeated concerns, event/place phrases, hashtags, and keywords. These entities render as graph nodes and become expansion terms for follow-up searches.
+
+Create an investigation run from the CLI:
+
+```bash
+npm run agent:investigation -- --query=Hamilton --date-range=90 --platform=all
 ```
 
 Run graph builder:

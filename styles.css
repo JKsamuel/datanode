@@ -192,6 +192,127 @@ p {
   background: #162230;
 }
 
+.run-controls {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.run-controls label {
+  display: grid;
+  gap: 5px;
+}
+
+.run-controls label span {
+  color: #91a1b4;
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.run-controls select {
+  width: 100%;
+  border: 1px solid #293644;
+  border-radius: 2px;
+  background: #070b10;
+  color: #dce8f2;
+  padding: 7px 8px;
+  outline: 0;
+  font-size: 11px;
+  font-weight: 820;
+}
+
+.run-controls select:focus {
+  border-color: var(--blue);
+}
+
+.run-summary {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.run-row {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 8px;
+  border: 1px solid #202b37;
+  background: #090e14;
+  padding: 7px;
+}
+
+.run-row span {
+  color: var(--faint);
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.run-row strong {
+  min-width: 0;
+  color: #cfd9e4;
+  font-size: 10px;
+  font-weight: 850;
+  overflow-wrap: anywhere;
+}
+
+.run-history {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.run-history-item {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  border: 1px solid #202b37;
+  border-radius: 2px;
+  background: #090e14;
+  color: #cfd9e4;
+  padding: 8px;
+  text-align: left;
+}
+
+.run-history-item:hover {
+  border-color: #405164;
+  background: #0d141c;
+}
+
+.run-history-item.active {
+  border-color: #4c7890;
+  background: #102331;
+}
+
+.run-history-title {
+  overflow: hidden;
+  color: var(--strong);
+  font-size: 11px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-history-meta,
+.run-history-time,
+.run-history-empty {
+  color: #91a1b4;
+  font-size: 9px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.run-history-time {
+  color: var(--faint);
+}
+
+.run-history-empty {
+  border: 1px solid #202b37;
+  background: #090e14;
+  padding: 8px;
+}
+
 .grid-buttons {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -561,6 +682,13 @@ p {
   --dot-color: #d39a28;
   --dot-ring: rgba(211, 154, 40, 0.38);
   color: #d9f2ff;
+}
+
+.node.entity {
+  --dot-size: 13px;
+  --dot-color: #d9aa45;
+  --dot-ring: rgba(217, 170, 69, 0.36);
+  color: #fff0c7;
 }
 
 .node.post {

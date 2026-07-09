@@ -97,7 +97,19 @@ const state = {
   query: "Hamilton",
   source: "Mock data",
   view: window.location.hash === "#feed" ? "feed" : "graph",
-  feedSort: "date",
+  feedSort: "rank",
+  dateRange: "90",
+  platform: "all",
+  runStartedAt: new Date().toISOString(),
+  runRecord: null,
+  runStatus: "preview",
+  runError: null,
+  recentRuns: [],
+  runsStatus: "loading",
+  runsError: null,
+  activeRunId: null,
+  activeRunPosts: null,
+  activeRunEntities: null,
 };
 
 let basePosts = fallbackPosts;
@@ -174,7 +186,7 @@ function cleanTag(tag) {
 }
 
 function escapeHtml(value) {
-  return String(value || "")
+  return String(value ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
@@ -219,14 +231,20 @@ function postsForState() {
   const explicitTopic = Boolean(topic);
   state.city = city.slug;
   state.topic = topic?.slug || null;
+  if (state.activeRunPosts) {
+    return state.activeRunPosts
+      .slice(0, 16)
+      .sort((a, b) => Number(a.rank || 9999) - Number(b.rank || 9999) || Number(b.score || 0) - Number(a.score || 0));
+  }
+  const runScopedPosts = basePosts.filter(postMatchesRunScope);
   const tokens = queryTokens(state.query);
   const genericAllQuery =
     !explicitCity &&
     !explicitTopic &&
     (tokens.length === 0 || tokens.every((token) => ["캐나다", "canada", "전체", "all", "social", "소셜"].includes(token)));
-  if (genericAllQuery) return basePosts.slice(0, 16).sort((a, b) => b.score - a.score);
+  if (genericAllQuery) return runScopedPosts.slice(0, 16).sort((a, b) => b.score - a.score);
 
-  const scoredPosts = basePosts
+  const scoredPosts = runScopedPosts
     .map((post) => {
       if (explicitCity && post.citySlug !== city.slug) return null;
       if (explicitTopic && post.topicSlug !== topic.slug) return null;
@@ -247,7 +265,7 @@ function postsForState() {
   if (scoredPosts.length > 0) return scoredPosts.slice(0, 16);
   if (state.source === "Supabase connected") return [];
 
-  return basePosts.map((post) => ({
+  return runScopedPosts.map((post) => ({
     ...post,
     id: `${city.slug}-${state.topic || "all"}-${post.id}`,
     cityName: city.slug === allCity.slug ? post.cityName || "Toronto" : city.en,
@@ -393,12 +411,113 @@ function formatDate(value) {
   }).format(date);
 }
 
+function formatDateTime(value) {
+  if (!value) return "Unknown";
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "Unknown";
+  return new Intl.DateTimeFormat("en-CA", {
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function normalizeApiPost(post) {
+  const score = Number(post.score || post.relevanceScore || 0);
+  return {
+    ...post,
+    sourceUrl: post.sourceUrl || post.source_url,
+    thumbnailUrl: post.thumbnailUrl || post.thumbnail_url,
+    cityName: post.cityName || post.citySlug || "Unknown city",
+    topicName: post.topicName || post.topicSlug || "Signal",
+    handle: post.handle || post.authorHandle || post.author_handle || "post",
+    hashtags: post.hashtags || [],
+    score: score <= 1 ? Math.round(score * 100) : Math.round(score),
+    status: post.status || "approved",
+    publishedAt: post.publishedAt || post.source_published_at || post.discovered_at || null,
+  };
+}
+
+function normalizeApiEntity(entity) {
+  return {
+    id: entity.id || `${entity.type}:${entity.normalizedKey || entity.label}`,
+    type: entity.type || entity.entity_type || "keyword",
+    label: entity.label || entity.normalizedKey || "Entity",
+    normalizedKey: entity.normalizedKey || entity.normalized_key || normalizeText(entity.label || "entity"),
+    rank: Number(entity.rank || 9999),
+    weight: Number(entity.weight || 0),
+    postCount: Number(entity.postCount || entity.post_count || 0),
+    postIds: (entity.postIds || entity.evidence_post_ids || []).map(String),
+    evidence: entity.evidence || {},
+  };
+}
+
 function sortedFeedPosts(posts) {
   const copy = [...posts];
+  if (state.feedSort === "rank") {
+    return copy.sort((a, b) => Number(a.rank || 9999) - Number(b.rank || 9999) || Number(b.score || 0) - Number(a.score || 0));
+  }
   if (state.feedSort === "score") {
     return copy.sort((a, b) => Number(b.score || 0) - Number(a.score || 0) || new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0));
   }
   return copy.sort((a, b) => new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0) || Number(b.score || 0) - Number(a.score || 0));
+}
+
+function dateRangeLabel() {
+  if (state.dateRange === "all") return "All time";
+  return `Last ${state.dateRange} days`;
+}
+
+function runDateRangeLabel(dateRange) {
+  if (dateRange === "all") return "All time";
+  return `Last ${dateRange || 90} days`;
+}
+
+function platformLabel() {
+  if (state.platform === "all") return "All platforms";
+  return state.platform.charAt(0).toUpperCase() + state.platform.slice(1);
+}
+
+function platformLabelForRun(platform) {
+  if (!platform || platform === "all") return "All platforms";
+  return platform.charAt(0).toUpperCase() + platform.slice(1);
+}
+
+function runRecordLabel() {
+  if (state.runStatus === "recording") return "Recording";
+  if (state.runStatus === "failed") return "Preview only";
+  if (state.runRecord?.id) return `Saved ${String(state.runRecord.id).slice(0, 8)}`;
+  return "Preview only";
+}
+
+function clearActiveRun() {
+  state.activeRunId = null;
+  state.activeRunPosts = null;
+  state.activeRunEntities = null;
+  state.runRecord = null;
+  state.runStatus = "preview";
+  state.runError = null;
+}
+
+function syncRunControls() {
+  const searchInput = document.getElementById("searchInput");
+  const dateRangeSelect = document.getElementById("dateRangeSelect");
+  const platformSelect = document.getElementById("platformSelect");
+  if (searchInput && searchInput.value !== state.query) searchInput.value = state.query;
+  if (dateRangeSelect && dateRangeSelect.value !== state.dateRange) dateRangeSelect.value = state.dateRange;
+  if (platformSelect && platformSelect.value !== state.platform) platformSelect.value = state.platform;
+}
+
+function postMatchesRunScope(post) {
+  if (state.platform !== "all" && post.platform !== state.platform) return false;
+  if (state.dateRange === "all") return true;
+  if (!post.publishedAt) return true;
+  const publishedAt = new Date(post.publishedAt);
+  if (!Number.isFinite(publishedAt.getTime())) return true;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - Number(state.dateRange || 90));
+  return publishedAt >= cutoff;
 }
 
 const keywordStopwords = new Set([
@@ -649,6 +768,10 @@ function buildGraph() {
     : `Organizes collected social posts in ${city.en} by hashtag, author, and context.`;
   const tags = topTags(posts);
   const keywords = interestingKeywords(posts, city, topic);
+  const postIdSet = new Set(posts.map((post) => String(post.id)));
+  const savedEntities = (state.activeRunEntities || [])
+    .filter((entity) => (entity.postIds || []).some((postId) => postIdSet.has(String(postId))))
+    .sort((a, b) => Number(a.rank || 9999) - Number(b.rank || 9999) || Number(b.weight || 0) - Number(a.weight || 0));
   const groupedPosts = new Map();
   posts.slice(0, 12).forEach((post) => {
     const cluster = clusterForPost(post);
@@ -719,29 +842,55 @@ function buildGraph() {
     });
   });
 
-  keywords.forEach((keyword, index) => {
-    const id = `keyword:${keyword.query}`;
-    const point = radialPoint(index, Math.max(keywords.length, 1), 39, 36, -Math.PI / 2);
-    nodes.push({
-      id,
-      kind: "keyword",
-      label: keyword.kind === "hashtag" ? `#${keyword.label}` : keyword.label,
-      sub: `${keyword.postIds.length} related posts`,
-      body: "Search this keyword again to expand the next branch.",
-      x: point.x,
-      y: point.y,
-      z: -90,
-      w: 118,
-      h: 48,
-      keyword,
+  if (savedEntities.length > 0) {
+    savedEntities.slice(0, 18).forEach((entity, index) => {
+      const id = `entity:${entity.type}:${entity.normalizedKey}`;
+      const point = radialPoint(index, Math.max(savedEntities.length, 1), 39, 36, -Math.PI / 2);
+      nodes.push({
+        id,
+        kind: "entity",
+        label: entity.label,
+        sub: `${entity.type} · ${entity.postCount} posts`,
+        body: "Extracted from the saved investigation run.",
+        x: point.x,
+        y: point.y,
+        z: -90,
+        w: 128,
+        h: 50,
+        entity,
+      });
+      edges.push({ id: `root-${id}`, from: "root", to: id, tone: "entity" });
+      entity.postIds.forEach((postId) => {
+        if (postIdSet.has(String(postId))) {
+          edges.push({ id: `${id}-${postId}`, from: id, to: `post:${postId}`, tone: "entity" });
+        }
+      });
     });
-    edges.push({ id: `root-${id}`, from: "root", to: id, tone: "keyword" });
-    keyword.postIds.forEach((postId) => {
-      if (posts.some((post) => String(post.id) === String(postId))) {
-        edges.push({ id: `${id}-${postId}`, from: id, to: `post:${postId}`, tone: "keyword" });
-      }
+  } else {
+    keywords.forEach((keyword, index) => {
+      const id = `keyword:${keyword.query}`;
+      const point = radialPoint(index, Math.max(keywords.length, 1), 39, 36, -Math.PI / 2);
+      nodes.push({
+        id,
+        kind: "keyword",
+        label: keyword.kind === "hashtag" ? `#${keyword.label}` : keyword.label,
+        sub: `${keyword.postIds.length} related posts`,
+        body: "Search this keyword again to expand the next branch.",
+        x: point.x,
+        y: point.y,
+        z: -90,
+        w: 118,
+        h: 48,
+        keyword,
+      });
+      edges.push({ id: `root-${id}`, from: "root", to: id, tone: "keyword" });
+      keyword.postIds.forEach((postId) => {
+        if (postIdSet.has(String(postId))) {
+          edges.push({ id: `${id}-${postId}`, from: id, to: `post:${postId}`, tone: "keyword" });
+        }
+      });
     });
-  });
+  }
 
   const selectedPostId = state.expandedPost || (state.selected.startsWith("post:") ? state.selected.replace(/^post:/, "") : null);
   const selectedPost = posts.find((post) => String(post.id) === selectedPostId);
@@ -803,7 +952,7 @@ function buildGraph() {
     });
 
     nodes.forEach((node) => {
-      if (node.kind === "cluster" || node.kind === "keyword") node.hidden = true;
+      if (node.kind === "cluster" || node.kind === "keyword" || node.kind === "entity") node.hidden = true;
       if (node.kind === "post" && node.id !== selectedPostNode.id && !branchRelatedIds.has(String(node.post?.id))) node.hidden = true;
     });
   }
@@ -828,6 +977,9 @@ function relatedPosts(selected, posts) {
   }
   if (selected.kind === "keyword") {
     return posts.filter((post) => selected.keyword.postIds.includes(String(post.id))).slice(0, 5);
+  }
+  if (selected.kind === "entity") {
+    return posts.filter((post) => selected.entity.postIds.includes(String(post.id))).slice(0, 5);
   }
   if (selected.kind === "post") {
     const selectedPost = selected.post;
@@ -858,11 +1010,70 @@ function renderFilters() {
       state.selected = "root";
       state.expandedPost = null;
       state.topic = null;
+      clearActiveRun();
       document.getElementById("searchInput").value = city.slug === allCity.slug ? "Canada" : city.en;
       render();
     });
     cityButtons.appendChild(button);
   });
+}
+
+function renderRunSummary(graph) {
+  const container = document.getElementById("runSummary");
+  if (!container) return;
+  const city = activeCity();
+  const topic = activeTopic();
+  const platformCounts = graph.posts.reduce((acc, post) => {
+    const key = post.platform || "unknown";
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+  const platformText = Object.entries(platformCounts)
+    .map(([platform, count]) => `${platform}: ${count}`)
+    .join(" · ") || "No matching posts";
+
+  container.innerHTML = `
+    <div class="run-row">
+      <span>Query</span>
+      <strong>${escapeHtml(state.query || "Untitled")}</strong>
+    </div>
+    <div class="run-row">
+      <span>Scope</span>
+      <strong>${escapeHtml(city.en)}${topic ? ` · ${escapeHtml(topic.en || topic.slug)}` : ""}</strong>
+    </div>
+    <div class="run-row">
+      <span>Window</span>
+      <strong>${escapeHtml(dateRangeLabel())}</strong>
+    </div>
+    <div class="run-row">
+      <span>Platform</span>
+      <strong>${escapeHtml(platformLabel())}</strong>
+    </div>
+    <div class="run-row">
+      <span>Data Source</span>
+      <strong>${escapeHtml(state.source)}</strong>
+    </div>
+    <div class="run-row">
+      <span>Record</span>
+      <strong>${escapeHtml(runRecordLabel())}</strong>
+    </div>
+    <div class="run-row">
+      <span>Matched</span>
+      <strong>${escapeHtml(graph.posts.length)} posts</strong>
+    </div>
+    <div class="run-row">
+      <span>Breakdown</span>
+      <strong>${escapeHtml(platformText)}</strong>
+    </div>
+    ${
+      state.runError
+        ? `<div class="run-row">
+            <span>API</span>
+            <strong>${escapeHtml(truncate(state.runError, 96))}</strong>
+          </div>`
+        : ""
+    }
+  `;
 }
 
 function assignSpherePoints(graph) {
@@ -1082,14 +1293,14 @@ function renderGraph(graph) {
     if (!from || !to || from.hidden || to.hidden) return;
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     const midX = (from.x + to.x) / 2;
-    const curve = edge.tone === "tag" || edge.tone === "keyword" ? 9 : 5;
+    const curve = edge.tone === "tag" || edge.tone === "keyword" || edge.tone === "entity" ? 9 : 5;
     const midY = (from.y + to.y) / 2 - curve;
     path.setAttribute("d", `M ${from.x} ${from.y} Q ${midX} ${midY} ${to.x} ${to.y}`);
     path.setAttribute("fill", "none");
     path.setAttribute("vector-effect", "non-scaling-stroke");
     path.setAttribute("stroke-width", related.has(from.id) && related.has(to.id) ? "0.34" : "0.18");
     path.setAttribute("opacity", related.has(from.id) && related.has(to.id) ? "0.84" : "0.24");
-    path.setAttribute("stroke", edge.tone === "primary" ? "#f6c85f" : edge.tone === "tag" || edge.tone === "keyword" ? "#5bb7d5" : edge.tone === "branch" ? "#8fe7c9" : "#62748d");
+    path.setAttribute("stroke", edge.tone === "primary" ? "#f6c85f" : edge.tone === "entity" ? "#d9aa45" : edge.tone === "tag" || edge.tone === "keyword" ? "#5bb7d5" : edge.tone === "branch" ? "#8fe7c9" : "#62748d");
     path.classList.add("edge", edge.tone);
     edgeLayer.appendChild(path);
   });
@@ -1109,7 +1320,7 @@ function renderGraph(graph) {
         <span class="card-title">${escapeHtml(node.label)}</span>
         <span class="card-sub">${escapeHtml(node.post.platform || "post")} · ${escapeHtml(node.post.score)}</span>
       `;
-    } else if (node.kind === "keyword") {
+    } else if (node.kind === "keyword" || node.kind === "entity") {
       button.innerHTML = `
         <span class="node-dot"></span>
         <span class="card-title">${escapeHtml(node.label)}</span>
@@ -1209,6 +1420,24 @@ function renderDetail(graph) {
       state.expandedPost = null;
       render();
     });
+  } else if (selected.entity) {
+    const city = activeCity();
+    const nextQuery = city.slug === allCity.slug ? selected.entity.label : `${city.en} ${selected.entity.label}`;
+    selectedBody.innerHTML = `
+      <div class="post-detail">
+        ${escapeHtml(selected.entity.type)} entity extracted from ${escapeHtml(selected.entity.postCount)} evidence posts.
+        <div class="tag-list">
+          <button class="tag-button" data-query="${escapeHtml(nextQuery)}">Explore this entity</button>
+        </div>
+      </div>
+    `;
+    selectedBody.querySelector("[data-query]")?.addEventListener("click", (event) => {
+      document.getElementById("searchInput").value = event.currentTarget.dataset.query;
+      state.selected = "root";
+      state.expandedPost = null;
+      clearActiveRun();
+      render();
+    });
   } else {
     selectedBody.textContent = "Select a post, hashtag, or city node to inspect the next branch of the graph.";
   }
@@ -1263,6 +1492,7 @@ function renderFeed(graph) {
         <div class="feed-meta">
           <span>@${escapeHtml(post.handle)}</span>
           <span>${escapeHtml((post.platform || "post").toUpperCase())}</span>
+          ${post.rank ? `<span>RANK ${escapeHtml(post.rank)}</span>` : ""}
           <span>${escapeHtml(post.status || "approved")}</span>
           <span>${escapeHtml(formatDate(post.publishedAt))}</span>
         </div>
@@ -1299,7 +1529,13 @@ function renderViewChrome() {
 function renderSeeds() {
   const city = activeCity();
   const topic = activeTopic();
-  const seeds = topic
+  const entitySeeds = (state.activeRunEntities || [])
+    .filter((entity) => ["concern", "event", "business", "place", "keyword"].includes(entity.type))
+    .slice(0, 8)
+    .map((entity) => entity.label);
+  const seeds = entitySeeds.length > 0
+    ? entitySeeds
+    : topic
     ? city.slug === allCity.slug
       ? [`#canada${topic.slug}`, `Canada ${topic.en || topic.slug}`, `${topic.en || topic.slug} Threads`, `Instagram ${topic.en || topic.slug}`, `${topic.slug} social`]
       : [`#${city.slug}${topic.slug}`, `${city.en} ${topic.en || topic.slug}`, `${topic.en || topic.slug} Threads`, `Instagram ${topic.en || topic.slug}`, `${city.en} social`]
@@ -1307,6 +1543,44 @@ function renderSeeds() {
       ? ["#canada", "Canada social", "Canada Threads", "Instagram Canada", "Canadian communities"]
       : [`#${city.slug}`, `${city.en} life`, `${city.en} social`, `Instagram ${city.en}`, `${city.en} Threads`];
   document.getElementById("seedList").innerHTML = seeds.map((seed) => `<span class="seed">${seed}</span>`).join("");
+}
+
+function renderRunHistory() {
+  const container = document.getElementById("runHistory");
+  if (!container) return;
+
+  if (state.runsStatus === "loading") {
+    container.innerHTML = `<div class="run-history-empty">Loading saved runs</div>`;
+    return;
+  }
+
+  if (state.runsError) {
+    container.innerHTML = `<div class="run-history-empty">${escapeHtml(truncate(state.runsError, 96))}</div>`;
+    return;
+  }
+
+  if (state.recentRuns.length === 0) {
+    container.innerHTML = `<div class="run-history-empty">No saved runs yet</div>`;
+    return;
+  }
+
+  container.innerHTML = "";
+  state.recentRuns.forEach((run) => {
+    const button = document.createElement("button");
+    button.className = `run-history-item ${state.activeRunId === run.id ? "active" : ""}`;
+    button.type = "button";
+    button.innerHTML = `
+      <span class="run-history-title">${escapeHtml(run.query || "Untitled")}</span>
+      <span class="run-history-meta">
+        ${escapeHtml(platformLabelForRun(run.platform))} · ${escapeHtml(runDateRangeLabel(run.dateRange))} · ${escapeHtml(run.resultCount ?? 0)} posts
+      </span>
+      <span class="run-history-time">${escapeHtml(formatDateTime(run.createdAt))}</span>
+    `;
+    button.addEventListener("click", () => {
+      loadSavedRun(run.id);
+    });
+    container.appendChild(button);
+  });
 }
 
 function render() {
@@ -1317,27 +1591,118 @@ function render() {
   const visibleEdgeCount = graph.edges.filter((edge) => visibleNodeIds.has(edge.from) && visibleNodeIds.has(edge.to)).length;
   document.getElementById("queryBadge").textContent = state.query;
   document.getElementById("nodeCount").textContent = state.view === "feed" ? `${graph.posts.length} posts` : `${visibleNodeIds.size} nodes`;
-  document.getElementById("edgeCount").textContent = state.view === "feed" ? `${baseEdges.length} edges` : `${visibleEdgeCount} links`;
+  document.getElementById("edgeCount").textContent = state.view === "feed" ? dateRangeLabel() : `${visibleEdgeCount} links`;
   document.querySelector(".badge.green").textContent = state.source;
   renderViewChrome();
   renderFilters();
+  renderRunSummary(graph);
   renderGraph(graph);
   renderFeed(graph);
   renderDetail(graph);
   renderSeeds();
+  renderRunHistory();
 }
 
-function runSearch() {
+async function loadRecentRuns({ renderAfter = true } = {}) {
+  state.runsStatus = "loading";
+  state.runsError = null;
+  if (renderAfter) render();
+
+  try {
+    const response = await fetch("/api/investigation-runs?limit=10");
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.ok) {
+      throw new Error(payload?.error || `Run history API failed: ${response.status}`);
+    }
+    state.recentRuns = payload.runs || [];
+    state.runsStatus = "ready";
+  } catch (error) {
+    state.runsStatus = "failed";
+    state.runsError = error instanceof Error ? error.message : String(error);
+    console.warn("[DataNode] Run history unavailable:", state.runsError);
+  } finally {
+    if (renderAfter) render();
+  }
+}
+
+async function loadSavedRun(runId, { renderAfter = true } = {}) {
+  state.runStatus = "recording";
+  state.runError = null;
+  if (renderAfter) render();
+
+  try {
+    const response = await fetch(`/api/investigation-runs/${encodeURIComponent(runId)}`);
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.ok) {
+      throw new Error(payload?.error || `Saved run API failed: ${response.status}`);
+    }
+    state.activeRunId = payload.run.id;
+    state.activeRunPosts = (payload.posts || []).map(normalizeApiPost);
+    state.activeRunEntities = (payload.entities || []).map(normalizeApiEntity);
+    state.runRecord = payload.run;
+    state.runStatus = "saved";
+    state.query = payload.run.query || state.query;
+    state.dateRange = String(payload.run.dateRange || state.dateRange);
+    state.platform = payload.run.platform || state.platform;
+    state.selected = "root";
+    state.expandedPost = null;
+    syncRunControls();
+  } catch (error) {
+    state.runStatus = "failed";
+    state.runError = error instanceof Error ? error.message : String(error);
+    console.warn("[DataNode] Saved run could not be loaded:", state.runError);
+  } finally {
+    if (renderAfter) render();
+  }
+}
+
+async function recordInvestigationRun() {
+  state.runStatus = "recording";
+  state.runError = null;
+  state.runRecord = null;
+  render();
+
+  try {
+    const response = await fetch("/api/investigation-runs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: state.query,
+        dateRange: state.dateRange,
+        platform: state.platform,
+      }),
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.ok) {
+      throw new Error(payload?.error || `Investigation API failed: ${response.status}`);
+    }
+    state.runRecord = payload.run;
+    state.runStatus = "saved";
+    await loadRecentRuns({ renderAfter: false });
+    await loadSavedRun(payload.run.id, { renderAfter: false });
+  } catch (error) {
+    state.runStatus = "failed";
+    state.runError = error instanceof Error ? error.message : String(error);
+    console.warn("[DataNode] Investigation run was not recorded:", state.runError);
+  } finally {
+    render();
+  }
+}
+
+function runSearch({ record = false } = {}) {
   state.selected = "root";
   state.expandedPost = null;
+  clearActiveRun();
+  state.runStatus = record ? "recording" : "preview";
   render();
+  if (record) recordInvestigationRun();
 }
 
-document.getElementById("searchInput").addEventListener("input", runSearch);
+document.getElementById("searchInput").addEventListener("input", () => runSearch());
 document.getElementById("searchInput").addEventListener("keydown", (event) => {
-  if (event.key === "Enter") runSearch();
+  if (event.key === "Enter") runSearch({ record: true });
 });
-document.getElementById("searchButton").addEventListener("click", runSearch);
+document.getElementById("searchButton").addEventListener("click", () => runSearch({ record: true }));
 document.getElementById("feedNav").addEventListener("click", () => {
   state.view = "feed";
 });
@@ -1350,10 +1715,26 @@ window.addEventListener("hashchange", () => {
 });
 document.querySelectorAll("[data-feed-sort]").forEach((button) => {
   button.addEventListener("click", () => {
-    state.feedSort = button.dataset.feedSort || "date";
+    state.feedSort = button.dataset.feedSort || "rank";
     document.querySelectorAll("[data-feed-sort]").forEach((entry) => entry.classList.toggle("active", entry === button));
     render();
   });
+});
+document.getElementById("dateRangeSelect").addEventListener("change", (event) => {
+  state.dateRange = event.currentTarget.value;
+  state.runStartedAt = new Date().toISOString();
+  state.selected = "root";
+  state.expandedPost = null;
+  clearActiveRun();
+  render();
+});
+document.getElementById("platformSelect").addEventListener("change", (event) => {
+  state.platform = event.currentTarget.value;
+  state.runStartedAt = new Date().toISOString();
+  state.selected = "root";
+  state.expandedPost = null;
+  clearActiveRun();
+  render();
 });
 
 (async function init() {
@@ -1372,5 +1753,6 @@ document.querySelectorAll("[data-feed-sort]").forEach((button) => {
   } catch (error) {
     console.warn("[DataNode] Supabase fallback:", error);
   }
+  await loadRecentRuns({ renderAfter: false });
   render();
 })();
