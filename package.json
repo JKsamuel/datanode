@@ -13,6 +13,8 @@
     "agent:review": "node agents/review-candidates-agent.js",
     "agent:graph": "node agents/graph-builder-agent.js",
     "agent:investigation": "node agents/investigation-run-agent.js",
+    "agent:plan": "node agents/expansion-planner-agent.js",
+    "agent:expand": "node agents/expansion-worker-agent.js",
     "agent:run": "node agents/run-city-agents.js",
     "agent:login:instagram": "node agents/save-storage-state.js --platform=instagram",
     "agent:login:threads": "node agents/save-storage-state.js --platform=threads",

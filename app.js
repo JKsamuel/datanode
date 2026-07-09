@@ -110,6 +110,13 @@ const state = {
   activeRunId: null,
   activeRunPosts: null,
   activeRunEntities: null,
+  expansionQueue: [],
+  expansionStatus: "idle",
+  expansionError: null,
+  expansionMessage: null,
+  lineage: null,
+  lineageStatus: "idle",
+  lineageError: null,
 };
 
 let basePosts = fallbackPosts;
@@ -453,6 +460,55 @@ function normalizeApiEntity(entity) {
   };
 }
 
+function normalizeQueueItem(item) {
+  return {
+    id: item.id,
+    sourceRunId: item.sourceRunId,
+    sourceEntityId: item.sourceEntityId,
+    query: item.query || "Untitled expansion",
+    platform: item.platform || "all",
+    dateRange: item.dateRange || "90",
+    depth: Number(item.depth || 1),
+    priority: Number(item.priority || 0),
+    status: item.status || "queued",
+    reason: item.reason || "manual_entity_expansion",
+    resultRunId: item.resultRunId || null,
+    createdAt: item.createdAt,
+    entity: item.entity || null,
+  };
+}
+
+function normalizeRunSummary(run) {
+  if (!run) return null;
+  return {
+    id: run.id,
+    runKey: run.runKey || run.run_key,
+    query: run.query || "Untitled run",
+    platform: run.platform || "all",
+    dateRange: run.dateRange || run.date_range || "90",
+    status: run.status || "completed",
+    resultCount: Number(run.resultCount ?? run.result_count ?? 0),
+    graphNodeCount: Number(run.graphNodeCount ?? run.graph_node_count ?? 0),
+    graphEdgeCount: Number(run.graphEdgeCount ?? run.graph_edge_count ?? 0),
+    createdAt: run.createdAt || run.created_at || null,
+    metadata: run.metadata || {},
+  };
+}
+
+function normalizeLineage(payload) {
+  return {
+    current: normalizeRunSummary(payload.current),
+    ancestors: (payload.ancestors || []).map(normalizeRunSummary).filter(Boolean),
+    inbound: payload.inbound ? normalizeQueueItem(payload.inbound) : null,
+    children: (payload.children || [])
+      .map((child) => ({
+        queue: child.queue ? normalizeQueueItem(child.queue) : null,
+        run: normalizeRunSummary(child.run),
+      }))
+      .filter((child) => child.run),
+  };
+}
+
 function sortedFeedPosts(posts) {
   const copy = [...posts];
   if (state.feedSort === "rank") {
@@ -495,6 +551,13 @@ function clearActiveRun() {
   state.activeRunId = null;
   state.activeRunPosts = null;
   state.activeRunEntities = null;
+  state.expansionQueue = [];
+  state.expansionStatus = "idle";
+  state.expansionError = null;
+  state.expansionMessage = null;
+  state.lineage = null;
+  state.lineageStatus = "idle";
+  state.lineageError = null;
   state.runRecord = null;
   state.runStatus = "preview";
   state.runError = null;
@@ -1428,6 +1491,7 @@ function renderDetail(graph) {
         ${escapeHtml(selected.entity.type)} entity extracted from ${escapeHtml(selected.entity.postCount)} evidence posts.
         <div class="tag-list">
           <button class="tag-button" data-query="${escapeHtml(nextQuery)}">Explore this entity</button>
+          ${state.activeRunId ? `<button class="tag-button" data-queue-entity="${escapeHtml(selected.entity.id)}">Queue expansion</button>` : ""}
         </div>
       </div>
     `;
@@ -1437,6 +1501,9 @@ function renderDetail(graph) {
       state.expandedPost = null;
       clearActiveRun();
       render();
+    });
+    selectedBody.querySelector("[data-queue-entity]")?.addEventListener("click", () => {
+      queueExpansionForEntity(selected.entity);
     });
   } else {
     selectedBody.textContent = "Select a post, hashtag, or city node to inspect the next branch of the graph.";
@@ -1583,6 +1650,168 @@ function renderRunHistory() {
   });
 }
 
+function renderLineage() {
+  const container = document.getElementById("runLineage");
+  if (!container) return;
+
+  if (!state.activeRunId) {
+    container.innerHTML = `<div class="run-history-empty">Select a saved run</div>`;
+    return;
+  }
+
+  if (state.lineageStatus === "loading") {
+    container.innerHTML = `<div class="run-history-empty">Loading path</div>`;
+    return;
+  }
+
+  if (state.lineageError) {
+    container.innerHTML = `<div class="run-history-empty">${escapeHtml(truncate(state.lineageError, 96))}</div>`;
+    return;
+  }
+
+  if (!state.lineage?.current) {
+    container.innerHTML = `<div class="run-history-empty">No lineage data</div>`;
+    return;
+  }
+
+  const path = [...state.lineage.ancestors, state.lineage.current];
+  container.innerHTML = "";
+
+  const pathGroup = document.createElement("div");
+  pathGroup.className = "lineage-path";
+  path.forEach((run, index) => {
+    const button = document.createElement("button");
+    button.className = `lineage-node ${run.id === state.activeRunId ? "active" : ""}`;
+    button.type = "button";
+    button.innerHTML = `
+      <span class="lineage-index">${escapeHtml(index + 1)}</span>
+      <span class="lineage-copy">
+        <span class="lineage-title">${escapeHtml(run.query)}</span>
+        <span class="lineage-meta">${escapeHtml(run.resultCount)} posts · ${escapeHtml(platformLabelForRun(run.platform))}</span>
+      </span>
+    `;
+    button.addEventListener("click", () => {
+      if (run.id !== state.activeRunId) loadSavedRun(run.id);
+    });
+    pathGroup.appendChild(button);
+  });
+  container.appendChild(pathGroup);
+
+  if (state.lineage.inbound) {
+    const inbound = document.createElement("div");
+    inbound.className = "lineage-context";
+    inbound.textContent = `Expanded from: ${state.lineage.inbound.query}`;
+    container.appendChild(inbound);
+  }
+
+  const children = state.lineage.children || [];
+  const childGroup = document.createElement("div");
+  childGroup.className = "lineage-children";
+  const title = document.createElement("div");
+  title.className = "queue-meta";
+  title.textContent = children.length > 0 ? "Child branches" : "No completed child branches";
+  childGroup.appendChild(title);
+  children.forEach((child) => {
+    const button = document.createElement("button");
+    button.className = "lineage-child";
+    button.type = "button";
+    button.innerHTML = `
+      <span class="lineage-title">${escapeHtml(child.run.query)}</span>
+      <span class="lineage-meta">${escapeHtml(child.run.resultCount)} posts · ${escapeHtml(child.queue?.status || "completed")}</span>
+    `;
+    button.addEventListener("click", () => loadSavedRun(child.run.id));
+    childGroup.appendChild(button);
+  });
+  container.appendChild(childGroup);
+}
+
+function renderExpansionQueue() {
+  const container = document.getElementById("expansionQueue");
+  if (!container) return;
+
+  if (!state.activeRunId) {
+    container.innerHTML = `<div class="queue-empty">Select a saved run</div>`;
+    return;
+  }
+
+  if (state.expansionStatus === "loading" || state.expansionStatus === "saving") {
+    container.innerHTML = `<div class="queue-empty">${state.expansionStatus === "saving" ? "Queueing expansion" : "Loading queue"}</div>`;
+    return;
+  }
+
+  container.innerHTML = "";
+  const queuedCount = state.expansionQueue.filter((item) => item.status === "queued" || item.status === "failed").length;
+  const isBusy = ["planning", "running"].includes(state.expansionStatus);
+  const toolbar = document.createElement("div");
+  toolbar.className = "queue-toolbar";
+  toolbar.innerHTML = `
+    <button class="queue-action" type="button" data-plan-expansions ${isBusy ? "disabled" : ""}>Suggest</button>
+    <button class="queue-action primary" type="button" data-run-next-expansion ${queuedCount > 0 && !isBusy ? "" : "disabled"}>Run next</button>
+  `;
+  toolbar.querySelector("[data-plan-expansions]")?.addEventListener("click", () => {
+    planExpansionsForRun();
+  });
+  toolbar.querySelector("[data-run-next-expansion]")?.addEventListener("click", () => {
+    runNextQueuedExpansion();
+  });
+  container.appendChild(toolbar);
+
+  if (state.expansionMessage) {
+    const message = document.createElement("div");
+    message.className = "queue-empty";
+    message.textContent = state.expansionMessage;
+    container.appendChild(message);
+  }
+
+  if (state.expansionError) {
+    const error = document.createElement("div");
+    error.className = "queue-empty";
+    error.textContent = truncate(state.expansionError, 96);
+    container.appendChild(error);
+    return;
+  }
+
+  if (state.expansionQueue.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "queue-empty";
+    empty.textContent = "No queued expansions";
+    container.appendChild(empty);
+    return;
+  }
+
+  state.expansionQueue.forEach((item) => {
+    const element = document.createElement("div");
+    const canRun = ["queued", "failed"].includes(item.status);
+    const canOpenResult = item.status === "completed" && item.resultRunId;
+    element.className = `queue-item status-${item.status}`;
+    element.innerHTML = `
+      <button class="queue-main" type="button">
+        <span class="queue-title">${escapeHtml(item.query)}</span>
+        <span class="queue-meta">${escapeHtml(item.status)} · depth ${escapeHtml(item.depth)} · ${escapeHtml(platformLabelForRun(item.platform))}</span>
+      </button>
+      <div class="queue-actions">
+        ${
+          canOpenResult
+            ? `<button class="queue-action" type="button" data-open-run="${escapeHtml(item.resultRunId)}">Open</button>`
+            : `<button class="queue-action primary" type="button" data-run-queue="${escapeHtml(item.id)}" ${canRun && !isBusy ? "" : "disabled"}>Run</button>`
+        }
+      </div>
+    `;
+    element.querySelector(".queue-main")?.addEventListener("click", () => {
+      document.getElementById("searchInput").value = item.query;
+      clearActiveRun();
+      runSearch();
+    });
+    element.querySelector("[data-run-queue]")?.addEventListener("click", () => {
+      runQueuedExpansion(item.id);
+    });
+    element.querySelector("[data-open-run]")?.addEventListener("click", (event) => {
+      loadSavedRun(event.currentTarget.dataset.openRun);
+    });
+    container.appendChild(element);
+  });
+}
+
 function render() {
   const city = activeCity();
   state.query = document.getElementById("searchInput").value.trim() || (city.slug === allCity.slug ? "Canada" : city.en);
@@ -1601,6 +1830,8 @@ function render() {
   renderDetail(graph);
   renderSeeds();
   renderRunHistory();
+  renderLineage();
+  renderExpansionQueue();
 }
 
 async function loadRecentRuns({ renderAfter = true } = {}) {
@@ -1622,6 +1853,202 @@ async function loadRecentRuns({ renderAfter = true } = {}) {
     console.warn("[DataNode] Run history unavailable:", state.runsError);
   } finally {
     if (renderAfter) render();
+  }
+}
+
+async function loadExpansionQueue(runId = state.activeRunId, { renderAfter = true } = {}) {
+  if (!runId) return;
+  state.expansionStatus = "loading";
+  state.expansionError = null;
+  if (renderAfter) render();
+
+  try {
+    const response = await fetch(`/api/expansion-queue?runId=${encodeURIComponent(runId)}&limit=20`);
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.ok) {
+      throw new Error(payload?.error || `Expansion queue API failed: ${response.status}`);
+    }
+    state.expansionQueue = (payload.queue || []).map(normalizeQueueItem);
+    state.expansionStatus = "ready";
+  } catch (error) {
+    state.expansionStatus = "failed";
+    state.expansionError = error instanceof Error ? error.message : String(error);
+    console.warn("[DataNode] Expansion queue unavailable:", state.expansionError);
+  } finally {
+    if (renderAfter) render();
+  }
+}
+
+async function loadRunLineage(runId = state.activeRunId, { renderAfter = true } = {}) {
+  if (!runId) return;
+  state.lineageStatus = "loading";
+  state.lineageError = null;
+  if (renderAfter) render();
+
+  try {
+    const response = await fetch(`/api/investigation-runs/${encodeURIComponent(runId)}/lineage?childLimit=20`);
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.ok) {
+      throw new Error(payload?.error || `Lineage API failed: ${response.status}`);
+    }
+    state.lineage = normalizeLineage(payload);
+    state.lineageStatus = "ready";
+  } catch (error) {
+    state.lineageStatus = "failed";
+    state.lineageError = error instanceof Error ? error.message : String(error);
+    console.warn("[DataNode] Run lineage unavailable:", state.lineageError);
+  } finally {
+    if (renderAfter) render();
+  }
+}
+
+function expansionQueryForEntity(entity) {
+  const city = activeCity();
+  if (city.slug === allCity.slug) return entity.label;
+  return `${city.en} ${entity.label}`;
+}
+
+async function queueExpansionForEntity(entity) {
+  if (!state.activeRunId || !entity?.id) return;
+  state.expansionStatus = "saving";
+  state.expansionError = null;
+  state.expansionMessage = null;
+  render();
+
+  try {
+    const response = await fetch("/api/expansion-queue", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sourceRunId: state.activeRunId,
+        sourceEntityId: entity.id,
+        query: expansionQueryForEntity(entity),
+        platform: state.platform,
+        dateRange: state.dateRange,
+        depth: 1,
+        priority: Number(entity.weight || entity.postCount || 0),
+        metadata: {
+          entity_type: entity.type,
+          entity_label: entity.label,
+          entity_post_count: entity.postCount,
+        },
+      }),
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.ok) {
+      throw new Error(payload?.error || `Queue API failed: ${response.status}`);
+    }
+    state.expansionMessage = `Queued ${payload.item?.query || entity.label}`;
+    await loadExpansionQueue(state.activeRunId, { renderAfter: false });
+  } catch (error) {
+    state.expansionStatus = "failed";
+    state.expansionError = error instanceof Error ? error.message : String(error);
+    console.warn("[DataNode] Expansion could not be queued:", state.expansionError);
+  } finally {
+    render();
+  }
+}
+
+async function planExpansionsForRun() {
+  if (!state.activeRunId) return;
+  state.expansionStatus = "planning";
+  state.expansionError = null;
+  state.expansionMessage = "Suggesting expansion candidates";
+  render();
+
+  try {
+    const response = await fetch(`/api/investigation-runs/${encodeURIComponent(state.activeRunId)}/plan-expansions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ maxItems: 8 }),
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.ok) {
+      throw new Error(payload?.error || `Expansion planner API failed: ${response.status}`);
+    }
+    await loadExpansionQueue(state.activeRunId, { renderAfter: false });
+    state.expansionStatus = "ready";
+    state.expansionMessage = `Suggested ${payload.plannedCount || 0} expansion candidates`;
+  } catch (error) {
+    state.expansionStatus = "failed";
+    state.expansionError = error instanceof Error ? error.message : String(error);
+    console.warn("[DataNode] Expansion planner failed:", state.expansionError);
+  } finally {
+    render();
+  }
+}
+
+async function runQueuedExpansion(queueId) {
+  if (!queueId) return;
+  const parentRunId = state.activeRunId;
+  state.expansionStatus = "running";
+  state.expansionError = null;
+  state.expansionMessage = "Running queued expansion";
+  render();
+
+  try {
+    const response = await fetch(`/api/expansion-queue/${encodeURIComponent(queueId)}/run`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ resultLimit: 80 }),
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.ok) {
+      throw new Error(payload?.error || `Expansion worker API failed: ${response.status}`);
+    }
+    await loadRecentRuns({ renderAfter: false });
+    const resultRunId = payload.run?.id || payload.item?.resultRunId;
+    if (resultRunId) {
+      await loadSavedRun(resultRunId, { renderAfter: false });
+      state.expansionMessage = payload.skipped ? "Opened existing child run" : "Child investigation run created";
+    } else if (parentRunId) {
+      await loadExpansionQueue(parentRunId, { renderAfter: false });
+      state.expansionMessage = "Expansion completed";
+    }
+    state.expansionStatus = "ready";
+  } catch (error) {
+    state.expansionStatus = "failed";
+    state.expansionError = error instanceof Error ? error.message : String(error);
+    console.warn("[DataNode] Queued expansion could not run:", state.expansionError);
+  } finally {
+    render();
+  }
+}
+
+async function runNextQueuedExpansion() {
+  if (!state.activeRunId) return;
+  const parentRunId = state.activeRunId;
+  state.expansionStatus = "running";
+  state.expansionError = null;
+  state.expansionMessage = "Running next queued expansion";
+  render();
+
+  try {
+    const response = await fetch("/api/expansion-queue/run-next", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ runId: parentRunId, resultLimit: 80 }),
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.ok) {
+      throw new Error(payload?.error || `Expansion worker API failed: ${response.status}`);
+    }
+    await loadRecentRuns({ renderAfter: false });
+    const resultRunId = payload.run?.id || payload.item?.resultRunId;
+    if (resultRunId) {
+      await loadSavedRun(resultRunId, { renderAfter: false });
+      state.expansionMessage = payload.skipped ? "Opened existing child run" : "Child investigation run created";
+    } else {
+      await loadExpansionQueue(parentRunId, { renderAfter: false });
+      state.expansionMessage = "Expansion completed";
+    }
+    state.expansionStatus = "ready";
+  } catch (error) {
+    state.expansionStatus = "failed";
+    state.expansionError = error instanceof Error ? error.message : String(error);
+    console.warn("[DataNode] Next queued expansion could not run:", state.expansionError);
+  } finally {
+    render();
   }
 }
 
@@ -1647,6 +2074,10 @@ async function loadSavedRun(runId, { renderAfter = true } = {}) {
     state.selected = "root";
     state.expandedPost = null;
     syncRunControls();
+    await Promise.all([
+      loadExpansionQueue(payload.run.id, { renderAfter: false }),
+      loadRunLineage(payload.run.id, { renderAfter: false }),
+    ]);
   } catch (error) {
     state.runStatus = "failed";
     state.runError = error instanceof Error ? error.message : String(error);

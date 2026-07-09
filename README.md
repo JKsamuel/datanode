@@ -122,8 +122,8 @@ Important concepts:
 - `social_posts`: canonical collected posts, reels, and threads.
 - `entities`: extracted keywords, hashtags, authors, concerns, events, businesses, places, and topics.
 - `investigation_run_entities`: ranked entity snapshots and evidence post links for each saved investigation run.
+- `expansion_queue`: follow-up search candidates generated from promising entities, plus worker status and child run links.
 - `entity_edges` or expanded `graph_edges`: future generalized relationships between posts and entities.
-- `expansion_queue`: newly discovered entities that should become follow-up searches.
 - `graph_snapshots`: cached graph state for a search session.
 
 The current schema already has `social_posts`, `hashtags`, `post_hashtags`, and `graph_edges`. These should be treated as the foundation, not the final model.
@@ -159,13 +159,24 @@ The target agent loop is:
    - keyword -> related keyword
 6. Rank expansion candidates.
 7. Push high-value entities into an expansion queue.
-8. Repeat within a controlled budget.
+8. Execute queued expansion items as child investigation runs.
+9. Repeat within a controlled budget.
 
 The agent system should work like social deep research:
 
 ```text
 initial query -> collect -> extract -> graph -> find promising entities -> collect again -> expand graph
 ```
+
+Current expansion-worker behavior:
+
+- The UI can queue an extracted entity from a saved investigation run.
+- The planner can suggest expansion candidates from the highest-value extracted entities in a saved run.
+- The worker consumes a queued item and creates a child `investigation_runs` record.
+- The queue item is updated from `queued` to `running` to `completed` or `failed`.
+- Completed queue items store `result_run_id`, so the UI can open the child graph.
+- Child runs store parent context in metadata: parent run id, source queue id, source entity id, depth, and expansion reason.
+- The UI reads run lineage from parent metadata and completed expansion queue rows, then renders the active investigation path and completed child branches.
 
 ## Current Agent Notes
 
@@ -354,16 +365,30 @@ Open:
 http://localhost:4173
 ```
 
-`npm run dev` starts the local Node server. It serves the frontend and exposes `/api/investigation-runs`, which records a query/date/platform run into Supabase using the server-side service role key.
+`npm run dev` starts the local Node server. It serves the frontend and exposes `/api/investigation-runs` plus `/api/expansion-queue`, which record query/date/platform runs and graph expansion work into Supabase using the server-side service role key.
 
 The app also reads recent saved runs from `/api/investigation-runs`. Selecting a saved run loads its ranked `investigation_run_posts` snapshot and uses that evidence set for both Feed and Entity Graph views.
 
 Saved runs also include extracted `investigation_run_entities`. The current extractor is rule-based and captures authors, repeated concerns, event/place phrases, hashtags, and keywords. These entities render as graph nodes and become expansion terms for follow-up searches.
 
+Entity inspector actions can queue follow-up searches into `expansion_queue`. The expansion planner can also suggest candidates automatically from the strongest entities in a saved run. The expansion worker consumes queued items and creates child investigation runs linked by `result_run_id`. The Investigation Path panel shows parent runs and completed child branches so the exploration does not become a flat recent-run list.
+
 Create an investigation run from the CLI:
 
 ```bash
 npm run agent:investigation -- --query=Hamilton --date-range=90 --platform=all
+```
+
+Suggest expansion candidates for a saved run:
+
+```bash
+npm run agent:plan -- --run-id=<investigation-run-id> --max-items=8
+```
+
+Run the next queued graph expansion:
+
+```bash
+npm run agent:expand -- --limit=1
 ```
 
 Run graph builder:

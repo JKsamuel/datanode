@@ -3,6 +3,14 @@ import { createServer } from 'node:http';
 import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadEnv } from './agents/lib/env.js';
+import {
+  createExpansionQueueItem,
+  getInvestigationLineage,
+  listExpansionQueue,
+  planExpansionQueueForRun,
+  runExpansionQueueItem,
+  runNextExpansionQueueItem,
+} from './agents/lib/expansion-queue.js';
 import { createInvestigationRun, getInvestigationRun, listInvestigationRuns } from './agents/lib/investigation.js';
 import { SupabaseRestClient, hasServiceRoleKey } from './agents/lib/supabase-rest.js';
 
@@ -42,6 +50,21 @@ async function readJsonBody(request) {
   return body ? JSON.parse(body) : {};
 }
 
+function serializeRunRow(run) {
+  if (!run) return null;
+  return {
+    id: run.id,
+    runKey: run.run_key,
+    query: run.query,
+    platform: run.platform,
+    dateRange: run.date_range,
+    resultCount: run.result_count,
+    graphNodeCount: run.graph_node_count,
+    graphEdgeCount: run.graph_edge_count,
+    createdAt: run.created_at,
+  };
+}
+
 async function handleApi(request, response, url) {
   if (url.pathname === '/api/health') {
     sendJson(response, 200, { ok: true, serviceRole: hasServiceRoleKey() });
@@ -54,6 +77,139 @@ async function handleApi(request, response, url) {
       const limit = Number.parseInt(url.searchParams.get('limit') || '12', 10);
       const runs = await listInvestigationRuns(client, { limit: Number.isFinite(limit) ? limit : 12 });
       sendJson(response, 200, { ok: true, runs });
+    } catch (error) {
+      sendJson(response, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/expansion-queue' && request.method === 'GET') {
+    try {
+      const client = new SupabaseRestClient();
+      const limit = Number.parseInt(url.searchParams.get('limit') || '20', 10);
+      const queue = await listExpansionQueue(client, {
+        runId: url.searchParams.get('runId') || null,
+        limit: Number.isFinite(limit) ? limit : 20,
+      });
+      sendJson(response, 200, { ok: true, queue });
+    } catch (error) {
+      sendJson(response, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/expansion-queue' && request.method === 'POST') {
+    if (!hasServiceRoleKey()) {
+      sendJson(response, 503, { ok: false, error: 'SUPABASE_SERVICE_ROLE_KEY is required on the local server.' });
+      return true;
+    }
+    try {
+      const body = await readJsonBody(request);
+      const client = new SupabaseRestClient();
+      const item = await createExpansionQueueItem(client, {
+        sourceRunId: String(body.sourceRunId || ''),
+        sourceEntityId: body.sourceEntityId ? String(body.sourceEntityId) : null,
+        query: String(body.query || ''),
+        platform: String(body.platform || 'all'),
+        dateRange: String(body.dateRange || '90'),
+        depth: Number.parseInt(body.depth || '1', 10),
+        priority: Number(body.priority || 0),
+        reason: String(body.reason || 'manual_entity_expansion'),
+        metadata: body.metadata || {},
+      });
+      sendJson(response, 200, { ok: true, item });
+    } catch (error) {
+      sendJson(response, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
+    }
+    return true;
+  }
+
+  const expansionRunMatch = url.pathname.match(/^\/api\/expansion-queue\/([0-9a-f-]{36})\/run$/i);
+  if (expansionRunMatch && request.method === 'POST') {
+    if (!hasServiceRoleKey()) {
+      sendJson(response, 503, { ok: false, error: 'SUPABASE_SERVICE_ROLE_KEY is required on the local server.' });
+      return true;
+    }
+    try {
+      const body = await readJsonBody(request);
+      const client = new SupabaseRestClient();
+      const result = await runExpansionQueueItem(client, expansionRunMatch[1], {
+        resultLimit: Number.parseInt(body.resultLimit || '80', 10),
+      });
+      sendJson(response, 200, {
+        ok: true,
+        item: result.item,
+        run: serializeRunRow(result.runResult?.run),
+        skipped: result.skipped,
+        reason: result.reason,
+      });
+    } catch (error) {
+      sendJson(response, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/expansion-queue/run-next' && request.method === 'POST') {
+    if (!hasServiceRoleKey()) {
+      sendJson(response, 503, { ok: false, error: 'SUPABASE_SERVICE_ROLE_KEY is required on the local server.' });
+      return true;
+    }
+    try {
+      const body = await readJsonBody(request);
+      const client = new SupabaseRestClient();
+      const result = await runNextExpansionQueueItem(client, {
+        runId: body.runId ? String(body.runId) : null,
+        resultLimit: Number.parseInt(body.resultLimit || '80', 10),
+      });
+      if (!result) {
+        sendJson(response, 404, { ok: false, error: 'No queued expansion item found.' });
+        return true;
+      }
+      sendJson(response, 200, {
+        ok: true,
+        item: result.item,
+        run: serializeRunRow(result.runResult?.run),
+        skipped: result.skipped,
+        reason: result.reason,
+      });
+    } catch (error) {
+      sendJson(response, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
+    }
+    return true;
+  }
+
+  const planExpansionMatch = url.pathname.match(/^\/api\/investigation-runs\/([0-9a-f-]{36})\/plan-expansions$/i);
+  if (planExpansionMatch && request.method === 'POST') {
+    if (!hasServiceRoleKey()) {
+      sendJson(response, 503, { ok: false, error: 'SUPABASE_SERVICE_ROLE_KEY is required on the local server.' });
+      return true;
+    }
+    try {
+      const body = await readJsonBody(request);
+      const client = new SupabaseRestClient();
+      const result = await planExpansionQueueForRun(client, planExpansionMatch[1], {
+        maxItems: Number.parseInt(body.maxItems || '8', 10),
+      });
+      sendJson(response, 200, {
+        ok: true,
+        run: result.run,
+        plannedCount: result.plannedCount,
+        items: result.items,
+      });
+    } catch (error) {
+      sendJson(response, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
+    }
+    return true;
+  }
+
+  const lineageMatch = url.pathname.match(/^\/api\/investigation-runs\/([0-9a-f-]{36})\/lineage$/i);
+  if (lineageMatch && request.method === 'GET') {
+    try {
+      const client = new SupabaseRestClient();
+      const lineage = await getInvestigationLineage(client, lineageMatch[1], {
+        childLimit: Number.parseInt(url.searchParams.get('childLimit') || '20', 10),
+      });
+      sendJson(response, 200, { ok: true, ...lineage });
     } catch (error) {
       sendJson(response, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
     }
@@ -78,17 +234,7 @@ async function handleApi(request, response, url) {
       });
       sendJson(response, 200, {
         ok: true,
-        run: {
-          id: result.run.id,
-          runKey: result.run.run_key,
-          query: result.run.query,
-          platform: result.run.platform,
-          dateRange: result.run.date_range,
-          resultCount: result.run.result_count,
-          graphNodeCount: result.run.graph_node_count,
-          graphEdgeCount: result.run.graph_edge_count,
-          createdAt: result.run.created_at,
-        },
+        run: serializeRunRow(result.run),
         posts: result.posts,
         entities: result.entities,
       });

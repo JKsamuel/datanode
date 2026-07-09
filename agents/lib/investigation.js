@@ -291,6 +291,7 @@ export async function createInvestigationRun({
   source = 'datanode_ui',
   postLimit = 500,
   resultLimit = 80,
+  metadata = {},
 } = {}) {
   const safePlatform = ['all', 'instagram', 'threads', 'tiktok', 'youtube', 'x', 'web'].includes(platform) ? platform : 'all';
   const safeDateRange = dateRange === 'all' || /^\d+$/.test(String(dateRange)) ? String(dateRange) : '90';
@@ -320,13 +321,14 @@ export async function createInvestigationRun({
   const extractedEntities = extractRunEntities(scored.map((entry) => entry.post));
   const { graphNodeCount, graphEdgeCount } = graphCounts(scored, extractedEntities);
   const runKey = runKeyFor({ query, platform: safePlatform, dateRange: safeDateRange, windowEnd });
-  const metadata = {
+  const runMetadata = {
     requested_query: query,
     normalized_query: normalizedQuery,
     inferred_city: city?.slug ?? null,
     inferred_topic: topic?.slug ?? null,
     scoped_post_count: scopedPosts.length,
     scoring: 'city_topic_keyword_relevance_v1',
+    ...metadata,
   };
 
   const runRows = await client.upsert(
@@ -347,7 +349,7 @@ export async function createInvestigationRun({
       graph_node_count: graphNodeCount,
       graph_edge_count: graphEdgeCount,
       is_public: true,
-      metadata,
+      metadata: runMetadata,
     },
     { onConflict: 'run_key' },
   );
